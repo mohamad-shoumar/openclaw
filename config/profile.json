@@ -1,0 +1,35 @@
+{
+  "candidate_name": "Mohamad Shoumar",
+  "location": "Beirut, Lebanon",
+  "experience_years": 3,
+  "resume_path": "Mohamad_Shoumar_Team_Lead.pdf",
+  "resume_text_path": "Mohamad Shoumar - Resume - Team Lead – Algorithmic Trader.txt",
+  "headline": "Team Lead and backend engineer focused on Python, FastAPI, AWS, and trading systems.",
+  "target_roles": [
+    "Backend Engineer",
+    "Python Engineer",
+    "Backend Developer",
+    "Trading Systems Engineer",
+    "Algorithmic Trading Engineer",
+    "Software Engineer"
+  ],
+  "required_skills": [
+    "python",
+    "fastapi",
+    "aws",
+    "trading systems"
+  ],
+  "preferred_skills": [
+    "postgres",
+    "django",
+    "asyncio",
+    "microservices",
+    "system design"
+  ],
+  "excluded_role_keywords": [
+    "frontend",
+    "devops",
+    "site reliability",
+    "data scientist"
+  ]
+}

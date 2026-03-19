@@ -1,0 +1,78 @@
+{
+  "strict_mode": true,
+  "max_job_age_days": 30,
+  "priority_job_age_days": 14,
+  "max_required_experience_years": 3,
+  "allowed_remote_scopes": [
+    "global"
+  ],
+  "rejected_title_keywords": [
+    "senior",
+    "staff",
+    "principal",
+    "director",
+    "manager"
+  ],
+  "required_skill_keywords": [
+    "python"
+  ],
+  "preferred_skill_keywords": [
+    "fastapi",
+    "django",
+    "aws",
+    "asyncio",
+    "trading",
+    "backend",
+    "microservices"
+  ],
+  "rejected_primary_stack_keywords": [
+    "node.js",
+    "nodejs",
+    "javascript",
+    "typescript",
+    "java",
+    "frontend",
+    "react",
+    "angular",
+    "devops",
+    "sre"
+  ],
+  "remote_restriction_patterns": [
+    "us only",
+    "united states only",
+    "canada only",
+    "uk only",
+    "europe only",
+    "eu only",
+    "emea only",
+    "apac only",
+    "must be based in",
+    "must reside in",
+    "authorized to work in",
+    "visa sponsorship unavailable",
+    "cannot hire in",
+    "not hiring in",
+    "time zones",
+    "timezone"
+  ],
+  "hybrid_patterns": [
+    "hybrid",
+    "on-site",
+    "onsite",
+    "office",
+    "in-office",
+    "come into the office"
+  ],
+  "global_remote_patterns": [
+    "remote - global",
+    "remote - worldwide",
+    "remote worldwide",
+    "work from anywhere",
+    "global remote",
+    "anywhere in the world"
+  ],
+  "lebanon_block_patterns": [
+    "lebanon",
+    "middle east"
+  ]
+}

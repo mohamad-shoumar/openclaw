@@ -1,0 +1,61 @@
+{
+  "greenhouse_boards": [
+    {
+      "company": "BitMEX",
+      "board_token": "bitmex"
+    },
+    {
+      "company": "Zscaler",
+      "board_token": "zscaler"
+    },
+    {
+      "company": "Bitpanda",
+      "board_token": "bitpanda"
+    }
+  ],
+  "lever_boards": [
+    {
+      "company": "Kraken",
+      "board_token": "kraken123"
+    },
+    {
+      "company": "Wintermute Trading",
+      "board_token": "wintermute-trading"
+    },
+    {
+      "company": "Token Metrics",
+      "board_token": "tokenmetrics"
+    }
+  ],
+  "ashby_boards": [
+    {
+      "company": "Percona",
+      "board_token": "percona"
+    },
+    {
+      "company": "TradingHub",
+      "board_token": "TRADINGHUB"
+    },
+    {
+      "company": "Wincent",
+      "board_token": "wincent"
+    }
+  ],
+  "serpapi": {
+    "engine": "google_jobs",
+    "queries": [
+      "python backend engineer remote",
+      "backend engineer python remote",
+      "software engineer python remote",
+      "fastapi engineer remote",
+      "backend developer python remote",
+      "trading systems engineer python",
+      "algorithmic trading engineer python"
+    ],
+    "pages_per_query": 1
+  },
+  "remote_api": {
+    "provider": "remotive",
+    "limit": 100
+  }
+}

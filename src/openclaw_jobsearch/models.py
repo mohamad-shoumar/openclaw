@@ -10,6 +10,8 @@ SourceTier = Literal["ats", "aggregator", "remote_api"]
 BoardType = Literal["greenhouse", "lever", "ashby", "serpapi", "remotive", "unknown"]
 ValidationStatus = Literal["accepted", "rejected"]
 RemoteScope = Literal["global", "restricted", "unknown"]
+ReviewStatus = Literal["not_queued", "pending_review", "approved", "rejected", "archived"]
+Phase3Status = Literal["not_started", "generated", "failed"]
 
 
 class ProfileConfig(BaseModel):
@@ -109,6 +111,20 @@ class JobRecord(BaseModel):
     summary: str = ""
     description_text: str = ""
     validation_status: ValidationStatus = "rejected"
+    review_status: ReviewStatus = "not_queued"
+    review_decision_at: datetime | None = None
+    review_decision_by: str | None = None
+    review_notes: str = ""
+    approval_reason: str = ""
+    phase3_ready: bool = False
+    phase3_status: Phase3Status = "not_started"
+    phase3_generated_at: datetime | None = None
+    artifact_dir: str = ""
+    job_description_path: str = ""
+    resume_path_generated: str = ""
+    cover_letter_path_generated: str = ""
+    artifact_meta_path: str = ""
+    phase3_error: str = ""
     rejection_reasons: list[str] = Field(default_factory=list)
     evidence_snippets: list[EvidenceSnippet] = Field(default_factory=list)
     normalized_url_key: str = ""
@@ -126,3 +142,72 @@ class RunSummary(BaseModel):
     rejected_jobs: int
     source_counts: dict[str, int]
     top_rejection_reasons: list[tuple[str, int]]
+
+
+class ApprovedJobContract(BaseModel):
+    job_slug: str
+    run_id: str
+    company: str
+    title: str
+    job_url: str
+    apply_url: str
+    posted_at: date | None = None
+    location_raw: str = ""
+    discovery_source: str
+    source_tier: SourceTier
+    board_type: BoardType
+    summary: str = ""
+    description_text: str = ""
+    required_tech: list[str] = Field(default_factory=list)
+    preferred_tech: list[str] = Field(default_factory=list)
+    salary_min: float | None = None
+    salary_max: float | None = None
+    salary_currency: str | None = None
+    salary_confidence: Literal["confirmed", "estimated", "not found"] = "not found"
+    approval_reason: str = ""
+    review_notes: str = ""
+    review_decision_at: datetime | None = None
+    artifact_dir: str
+    phase3_status: Phase3Status = "not_started"
+    phase3_generated_at: datetime | None = None
+    job_description_path: str = ""
+    resume_path_generated: str = ""
+    cover_letter_path_generated: str = ""
+    artifact_meta_path: str = ""
+    phase3_error: str = ""
+
+    @classmethod
+    def from_job(cls, job: JobRecord) -> "ApprovedJobContract":
+        artifact_dir = job.artifact_dir or f"artifacts/jobs/{job.job_slug}"
+        return cls(
+            job_slug=job.job_slug,
+            run_id=job.run_id,
+            company=job.company,
+            title=job.title,
+            job_url=job.job_url,
+            apply_url=job.apply_url,
+            posted_at=job.posted_at,
+            location_raw=job.location_raw,
+            discovery_source=job.discovery_source,
+            source_tier=job.source_tier,
+            board_type=job.board_type,
+            summary=job.summary,
+            description_text=job.description_text,
+            required_tech=list(job.required_tech),
+            preferred_tech=list(job.preferred_tech),
+            salary_min=job.salary_min,
+            salary_max=job.salary_max,
+            salary_currency=job.salary_currency,
+            salary_confidence=job.salary_confidence,
+            approval_reason=job.approval_reason,
+            review_notes=job.review_notes,
+            review_decision_at=job.review_decision_at,
+            artifact_dir=artifact_dir,
+            phase3_status=job.phase3_status,
+            phase3_generated_at=job.phase3_generated_at,
+            job_description_path=job.job_description_path,
+            resume_path_generated=job.resume_path_generated,
+            cover_letter_path_generated=job.cover_letter_path_generated,
+            artifact_meta_path=job.artifact_meta_path,
+            phase3_error=job.phase3_error,
+        )

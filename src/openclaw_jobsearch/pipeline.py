@@ -12,8 +12,8 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from .config import AppConfig
-from .db import connect, insert_run_summary, upsert_job
-from .models import EvidenceSnippet, JobRecord, RawJob, RunSummary
+from .db import connect, get_job, insert_run_summary, list_approved_jobs, list_review_jobs, upsert_job
+from .models import ApprovedJobContract, EvidenceSnippet, JobRecord, RawJob, RunSummary
 from .sources import build_sources
 
 
@@ -37,11 +37,15 @@ def run_pipeline(workspace_root: Path, config_dir: Path, data_dir: Path, output_
     normalized_jobs = [normalize_job(raw_job, run_id, config.rules) for raw_job in raw_jobs]
     unique_jobs = dedupe_jobs(normalized_jobs)
     validated_jobs = [validate_job(job, config) for job in unique_jobs]
-    accepted_jobs = shortlist_jobs(validated_jobs, config)
+    accepted_jobs = [job for job in validated_jobs if job.validation_status == "accepted"]
+    for job in accepted_jobs:
+        _queue_job_for_review(job)
+    shortlisted_jobs = shortlist_jobs(accepted_jobs, config)
 
     connection = connect(data_dir / "jobs.db")
     for job in validated_jobs:
         upsert_job(connection, job)
+    persisted_validated_jobs = [get_job(connection, job.job_slug) or job for job in validated_jobs]
 
     finished_at = datetime.now(timezone.utc)
     summary = RunSummary(
@@ -58,14 +62,33 @@ def run_pipeline(workspace_root: Path, config_dir: Path, data_dir: Path, output_
         ).most_common(10),
     )
     insert_run_summary(connection, summary)
+    review_jobs = list_review_jobs(connection)
+    approved_jobs = list_approved_jobs(connection)
 
-    _write_validated_snapshot(data_dir, run_id, validated_jobs)
-    _write_shortlist_markdown(output_dir, summary, accepted_jobs)
-    _write_shortlist_csv(output_dir, accepted_jobs)
-    _write_legacy_export(output_dir, accepted_jobs)
+    _write_validated_snapshot(data_dir, run_id, persisted_validated_jobs)
+    _write_shortlist_markdown(output_dir, summary, shortlisted_jobs)
+    _write_shortlist_csv(output_dir, shortlisted_jobs)
+    _write_review_queue_markdown(output_dir, review_jobs)
+    _write_review_queue_csv(output_dir, review_jobs)
+    _write_legacy_export(output_dir, review_jobs)
+    _write_approved_jobs_contract(output_dir, approved_jobs)
     _write_summary(output_dir, summary)
 
     return summary
+
+
+def export_review_outputs(data_dir: Path, output_dir: Path) -> dict[str, int]:
+    connection = connect(data_dir / "jobs.db")
+    review_jobs = list_review_jobs(connection)
+    approved_jobs = list_approved_jobs(connection)
+    _write_review_queue_markdown(output_dir, review_jobs)
+    _write_review_queue_csv(output_dir, review_jobs)
+    _write_legacy_export(output_dir, review_jobs)
+    _write_approved_jobs_contract(output_dir, approved_jobs)
+    return {
+        "review_jobs": len(review_jobs),
+        "approved_jobs": len(approved_jobs),
+    }
 
 
 def normalize_job(raw_job: RawJob, run_id: str, rules) -> JobRecord:
@@ -531,6 +554,52 @@ def _write_validated_snapshot(data_dir: Path, run_id: str, jobs: list[JobRecord]
     latest_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
 
+def _write_review_queue_markdown(output_dir: Path, jobs: list[JobRecord]) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grouped = {status: [] for status in ["pending_review", "approved", "rejected", "archived"]}
+    for job in jobs:
+        grouped.setdefault(job.review_status, []).append(job)
+
+    lines = [
+        "# Review Queue",
+        "",
+        f"- Total review jobs: {len(jobs)}",
+        f"- Pending review: {len(grouped['pending_review'])}",
+        f"- Approved: {len(grouped['approved'])}",
+        f"- Rejected: {len(grouped['rejected'])}",
+        f"- Archived: {len(grouped['archived'])}",
+        "",
+    ]
+    for status in ["pending_review", "approved", "rejected", "archived"]:
+        status_jobs = grouped.get(status, [])
+        if not status_jobs:
+            continue
+        lines.extend([f"## {status.replace('_', ' ').title()}", ""])
+        for index, job in enumerate(status_jobs, start=1):
+            lines.extend(
+                [
+                    f"### {index}. {job.company} - {job.title}",
+                    "",
+                    f"- Job slug: `{job.job_slug}`",
+                    f"- Review status: `{job.review_status}`",
+                    f"- Posted: {job.posted_at or 'unknown'} ({_age_text(job)})",
+                    f"- Source: `{job.discovery_source}` ({job.source_tier})",
+                    f"- Apply: {job.apply_url or job.job_url}",
+                    f"- Required tech: {', '.join(job.required_tech) or 'none detected'}",
+                    f"- Preferred tech: {', '.join(job.preferred_tech) or 'none detected'}",
+                    f"- Summary: {job.summary or 'No summary available.'}",
+                ]
+            )
+            if job.review_notes:
+                lines.append(f"- Review notes: {job.review_notes}")
+            if job.approval_reason:
+                lines.append(f"- Decision reason: {job.approval_reason}")
+            if job.review_decision_at:
+                lines.append(f"- Decision at: {job.review_decision_at.isoformat()}")
+            lines.append("")
+    (output_dir / "review_queue_latest.md").write_text("\n".join(lines), encoding="utf-8")
+
+
 def _write_shortlist_markdown(output_dir: Path, summary: RunSummary, jobs: list[JobRecord]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     lines = [
@@ -562,6 +631,49 @@ def _write_shortlist_markdown(output_dir: Path, summary: RunSummary, jobs: list[
             ]
         )
     (output_dir / "shortlist_latest.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def _write_review_queue_csv(output_dir: Path, jobs: list[JobRecord]) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "review_queue_latest.csv"
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "job_slug",
+                "review_status",
+                "review_decision_at",
+                "company",
+                "title",
+                "posted_at",
+                "source_tier",
+                "discovery_source",
+                "apply_url",
+                "required_tech",
+                "preferred_tech",
+                "review_notes",
+                "approval_reason",
+            ],
+        )
+        writer.writeheader()
+        for job in jobs:
+            writer.writerow(
+                {
+                    "job_slug": job.job_slug,
+                    "review_status": job.review_status,
+                    "review_decision_at": job.review_decision_at.isoformat() if job.review_decision_at else "",
+                    "company": job.company,
+                    "title": job.title,
+                    "posted_at": job.posted_at.isoformat() if job.posted_at else "",
+                    "source_tier": job.source_tier,
+                    "discovery_source": job.discovery_source,
+                    "apply_url": job.apply_url or job.job_url,
+                    "required_tech": ",".join(job.required_tech),
+                    "preferred_tech": ",".join(job.preferred_tech),
+                    "review_notes": job.review_notes,
+                    "approval_reason": job.approval_reason,
+                }
+            )
 
 
 def _write_shortlist_csv(output_dir: Path, jobs: list[JobRecord]) -> None:
@@ -603,6 +715,8 @@ def _write_legacy_export(output_dir: Path, jobs: list[JobRecord]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / "applications_export.csv"
     fieldnames = [
+        "job_slug",
+        "run_id",
         "date",
         "company",
         "role",
@@ -629,6 +743,8 @@ def _write_legacy_export(output_dir: Path, jobs: list[JobRecord]) -> None:
                 salary_range = f"{minimum}-{maximum} {currency}".strip()
             writer.writerow(
                 {
+                    "job_slug": job.job_slug,
+                    "run_id": job.run_id,
                     "date": date.today().isoformat(),
                     "company": job.company,
                     "role": job.title,
@@ -638,18 +754,41 @@ def _write_legacy_export(output_dir: Path, jobs: list[JobRecord]) -> None:
                     "interview_style": "not found",
                     "application_link": job.apply_url or job.job_url,
                     "cover_letter_path": "",
-                    "status": "needs review",
+                    "status": job.review_status,
                     "level": job.seniority_title,
-                    "notes": job.summary,
-                    "rejection_reason": "",
+                    "notes": job.review_notes or job.summary,
+                    "rejection_reason": job.approval_reason if job.review_status == "rejected" else "",
                 }
             )
+
+
+def _write_approved_jobs_contract(output_dir: Path, jobs: list[JobRecord]) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "approved_jobs_latest.jsonl"
+    lines = [ApprovedJobContract.from_job(job).model_dump_json() for job in jobs]
+    path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
 
 def _write_summary(output_dir: Path, summary: RunSummary) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / "run_summary_latest.json"
     path.write_text(summary.model_dump_json(indent=2), encoding="utf-8")
+
+
+def _queue_job_for_review(job: JobRecord) -> None:
+    job.review_status = "pending_review"
+    job.review_decision_at = None
+    job.review_decision_by = None
+    job.review_notes = ""
+    job.approval_reason = ""
+    job.phase3_ready = False
+    job.artifact_dir = ""
+
+
+def _age_text(job: JobRecord) -> str:
+    if not job.posted_at:
+        return "unknown"
+    return f"{(date.today() - job.posted_at).days} days old"
 
 
 def _normalize_url(url: str) -> str:

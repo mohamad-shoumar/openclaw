@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 
+from .artifact_generation import generate_phase3_artifacts
 from .db import connect, get_job, list_review_jobs, update_review_status
 from .pipeline import export_review_outputs, run_pipeline
 
@@ -97,6 +98,20 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="Reserved for future export filtering. Current export always writes the full queue and approved contract.",
     )
+
+    phase3_parser = subparsers.add_parser("phase3", help="Phase 3 artifact generation commands.")
+    phase3_subparsers = phase3_parser.add_subparsers(dest="phase3_command", required=True)
+
+    phase3_generate_parser = phase3_subparsers.add_parser("generate", help="Generate Phase 3 artifacts.")
+    add_common_path_arguments(phase3_generate_parser)
+    phase3_generate_parser.add_argument("job_slug", nargs="?", help="Optional approved job slug to generate.")
+
+    phase3_show_parser = phase3_subparsers.add_parser("show", help="Show Phase 3 status for a job.")
+    add_common_path_arguments(phase3_show_parser)
+    phase3_show_parser.add_argument("job_slug", help="Job slug to inspect.")
+
+    phase3_export_parser = phase3_subparsers.add_parser("export", help="Refresh Phase 3 related exports.")
+    add_common_path_arguments(phase3_export_parser)
     return parser
 
 
@@ -138,6 +153,23 @@ def print_review_job(job) -> None:
         print("Evidence:")
         for snippet in job.evidence_snippets:
             print(f"- {snippet.field}: {snippet.snippet}")
+
+
+def print_phase3_job(job) -> None:
+    print(f"Job slug: {job.job_slug}")
+    print(f"Company: {job.company}")
+    print(f"Title: {job.title}")
+    print(f"Review status: {job.review_status}")
+    print(f"Phase 3 status: {job.phase3_status}")
+    print(f"Artifact dir: {job.artifact_dir or 'not set'}")
+    print(f"Job description path: {job.job_description_path or 'not generated'}")
+    print(f"Resume path: {job.resume_path_generated or 'not generated'}")
+    print(f"Cover letter path: {job.cover_letter_path_generated or 'not generated'}")
+    print(f"Artifact metadata path: {job.artifact_meta_path or 'not generated'}")
+    if job.phase3_generated_at:
+        print(f"Generated at: {job.phase3_generated_at.isoformat()}")
+    if job.phase3_error:
+        print(f"Phase 3 error: {job.phase3_error}")
 
 
 def handle_review_list(args: argparse.Namespace, data_dir: Path) -> None:
@@ -198,6 +230,43 @@ def handle_review_export(data_dir: Path, output_dir: Path) -> None:
     )
 
 
+def handle_phase3_generate(
+    args: argparse.Namespace,
+    workspace_root: Path,
+    data_dir: Path,
+    output_dir: Path,
+) -> None:
+    config_dir = workspace_root / args.config_dir
+    summary = generate_phase3_artifacts(
+        workspace_root=workspace_root,
+        config_dir=config_dir,
+        data_dir=data_dir,
+        output_dir=output_dir,
+        job_slug=args.job_slug,
+    )
+    export_review_outputs(data_dir, output_dir)
+    print(
+        f"Generated Phase 3 artifacts for {summary['generated_jobs']} jobs; "
+        f"failed for {summary['failed_jobs']} jobs."
+    )
+
+
+def handle_phase3_show(args: argparse.Namespace, data_dir: Path) -> None:
+    connection = connect(data_dir / "jobs.db")
+    job = get_job(connection, args.job_slug)
+    if job is None:
+        raise SystemExit(f"Job not found: {args.job_slug}")
+    print_phase3_job(job)
+
+
+def handle_phase3_export(data_dir: Path, output_dir: Path) -> None:
+    counts = export_review_outputs(data_dir, output_dir)
+    print(
+        f"Exported Phase 3 related outputs for {counts['approved_jobs']} approved jobs "
+        f"and {counts['review_jobs']} review jobs."
+    )
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -214,19 +283,27 @@ def main() -> None:
         return
 
     workspace_root, data_dir, output_dir = resolve_paths(args)
-    _ = workspace_root
-    if args.review_command == "list":
-        handle_review_list(args, data_dir)
-    elif args.review_command == "show":
-        handle_review_show(args, data_dir)
-    elif args.review_command == "approve":
-        handle_review_update(args, data_dir, output_dir, "approved")
-    elif args.review_command == "reject":
-        handle_review_update(args, data_dir, output_dir, "rejected")
-    elif args.review_command == "archive":
-        handle_review_update(args, data_dir, output_dir, "archived")
-    elif args.review_command == "export":
-        handle_review_export(data_dir, output_dir)
+    if args.command == "review":
+        if args.review_command == "list":
+            handle_review_list(args, data_dir)
+        elif args.review_command == "show":
+            handle_review_show(args, data_dir)
+        elif args.review_command == "approve":
+            handle_review_update(args, data_dir, output_dir, "approved")
+        elif args.review_command == "reject":
+            handle_review_update(args, data_dir, output_dir, "rejected")
+        elif args.review_command == "archive":
+            handle_review_update(args, data_dir, output_dir, "archived")
+        elif args.review_command == "export":
+            handle_review_export(data_dir, output_dir)
+        return
+
+    if args.phase3_command == "generate":
+        handle_phase3_generate(args, workspace_root, data_dir, output_dir)
+    elif args.phase3_command == "show":
+        handle_phase3_show(args, data_dir)
+    elif args.phase3_command == "export":
+        handle_phase3_export(data_dir, output_dir)
 
 
 if __name__ == "__main__":

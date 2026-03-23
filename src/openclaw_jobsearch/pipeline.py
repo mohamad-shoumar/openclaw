@@ -72,6 +72,7 @@ def run_pipeline(workspace_root: Path, config_dir: Path, data_dir: Path, output_
     _write_review_queue_csv(output_dir, review_jobs)
     _write_legacy_export(output_dir, review_jobs)
     _write_approved_jobs_contract(output_dir, approved_jobs)
+    _write_phase3_summary(output_dir, approved_jobs)
     _write_summary(output_dir, summary)
 
     return summary
@@ -85,6 +86,7 @@ def export_review_outputs(data_dir: Path, output_dir: Path) -> dict[str, int]:
     _write_review_queue_csv(output_dir, review_jobs)
     _write_legacy_export(output_dir, review_jobs)
     _write_approved_jobs_contract(output_dir, approved_jobs)
+    _write_phase3_summary(output_dir, approved_jobs)
     return {
         "review_jobs": len(review_jobs),
         "approved_jobs": len(approved_jobs),
@@ -587,6 +589,7 @@ def _write_review_queue_markdown(output_dir: Path, jobs: list[JobRecord]) -> Non
                     f"- Apply: {job.apply_url or job.job_url}",
                     f"- Required tech: {', '.join(job.required_tech) or 'none detected'}",
                     f"- Preferred tech: {', '.join(job.preferred_tech) or 'none detected'}",
+                    f"- Phase 3 status: `{job.phase3_status}`",
                     f"- Summary: {job.summary or 'No summary available.'}",
                 ]
             )
@@ -596,6 +599,10 @@ def _write_review_queue_markdown(output_dir: Path, jobs: list[JobRecord]) -> Non
                 lines.append(f"- Decision reason: {job.approval_reason}")
             if job.review_decision_at:
                 lines.append(f"- Decision at: {job.review_decision_at.isoformat()}")
+            if job.cover_letter_path_generated:
+                lines.append(f"- Cover letter path: `{job.cover_letter_path_generated}`")
+            if job.resume_path_generated:
+                lines.append(f"- Resume path: `{job.resume_path_generated}`")
             lines.append("")
     (output_dir / "review_queue_latest.md").write_text("\n".join(lines), encoding="utf-8")
 
@@ -643,6 +650,7 @@ def _write_review_queue_csv(output_dir: Path, jobs: list[JobRecord]) -> None:
                 "job_slug",
                 "review_status",
                 "review_decision_at",
+                "phase3_status",
                 "company",
                 "title",
                 "posted_at",
@@ -653,6 +661,8 @@ def _write_review_queue_csv(output_dir: Path, jobs: list[JobRecord]) -> None:
                 "preferred_tech",
                 "review_notes",
                 "approval_reason",
+                "resume_path_generated",
+                "cover_letter_path_generated",
             ],
         )
         writer.writeheader()
@@ -662,6 +672,7 @@ def _write_review_queue_csv(output_dir: Path, jobs: list[JobRecord]) -> None:
                     "job_slug": job.job_slug,
                     "review_status": job.review_status,
                     "review_decision_at": job.review_decision_at.isoformat() if job.review_decision_at else "",
+                    "phase3_status": job.phase3_status,
                     "company": job.company,
                     "title": job.title,
                     "posted_at": job.posted_at.isoformat() if job.posted_at else "",
@@ -672,6 +683,8 @@ def _write_review_queue_csv(output_dir: Path, jobs: list[JobRecord]) -> None:
                     "preferred_tech": ",".join(job.preferred_tech),
                     "review_notes": job.review_notes,
                     "approval_reason": job.approval_reason,
+                    "resume_path_generated": job.resume_path_generated,
+                    "cover_letter_path_generated": job.cover_letter_path_generated,
                 }
             )
 
@@ -725,8 +738,11 @@ def _write_legacy_export(output_dir: Path, jobs: list[JobRecord]) -> None:
         "salary_confidence",
         "interview_style",
         "application_link",
+        "resume_path_generated",
         "cover_letter_path",
         "status",
+        "phase3_status",
+        "artifact_dir",
         "level",
         "notes",
         "rejection_reason",
@@ -753,8 +769,11 @@ def _write_legacy_export(output_dir: Path, jobs: list[JobRecord]) -> None:
                     "salary_confidence": job.salary_confidence,
                     "interview_style": "not found",
                     "application_link": job.apply_url or job.job_url,
-                    "cover_letter_path": "",
+                    "resume_path_generated": job.resume_path_generated,
+                    "cover_letter_path": job.cover_letter_path_generated,
                     "status": job.review_status,
+                    "phase3_status": job.phase3_status,
+                    "artifact_dir": job.artifact_dir,
                     "level": job.seniority_title,
                     "notes": job.review_notes or job.summary,
                     "rejection_reason": job.approval_reason if job.review_status == "rejected" else "",
@@ -767,6 +786,30 @@ def _write_approved_jobs_contract(output_dir: Path, jobs: list[JobRecord]) -> No
     path = output_dir / "approved_jobs_latest.jsonl"
     lines = [ApprovedJobContract.from_job(job).model_dump_json() for job in jobs]
     path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
+
+def _write_phase3_summary(output_dir: Path, approved_jobs: list[JobRecord]) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    generated_jobs = [job for job in approved_jobs if job.phase3_status == "generated"]
+    failed_jobs = [job for job in approved_jobs if job.phase3_status == "failed"]
+    pending_jobs = [job for job in approved_jobs if job.phase3_status == "not_started"]
+    path = output_dir / "phase3_latest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "approved_jobs": len(approved_jobs),
+                "generated_jobs": len(generated_jobs),
+                "failed_jobs": len(failed_jobs),
+                "pending_jobs": len(pending_jobs),
+                "generated_job_slugs": [job.job_slug for job in generated_jobs],
+                "failed_job_slugs": [job.job_slug for job in failed_jobs],
+                "pending_job_slugs": [job.job_slug for job in pending_jobs],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
 
 def _write_summary(output_dir: Path, summary: RunSummary) -> None:

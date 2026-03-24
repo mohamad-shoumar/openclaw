@@ -6,12 +6,14 @@ Local strict-mode job discovery pipeline plus Phase 2 manual approval queue for 
 
 Current pipeline does:
 
-- collect jobs from `Greenhouse`, `Lever`, optional `SerpAPI`, and `Remotive`
+- collect jobs from `Greenhouse`, `Lever`, simple custom careers pages, optional `SerpAPI`, and `Remotive`
 - normalize jobs into one schema
 - apply strict validation and rejection reasons
 - enqueue strict accepted jobs into a manual review queue
 - dedupe and export a shortlist
 - persist results to `SQLite` and `JSONL`
+
+Current watchlist includes direct boards for companies such as `Circle.so`, `GitLab`, `Automattic`, `Fingerprint`, and `Metabase`, plus a custom careers-page source for `MailerLite`.
 
 Current pipeline does not do:
 
@@ -97,7 +99,7 @@ Useful commands:
 ```bash
 PYTHONPATH=src python3 -m openclaw_jobsearch.cli review list --workspace-root .
 PYTHONPATH=src python3 -m openclaw_jobsearch.cli review show <job_slug> --workspace-root .
-PYTHONPATH=src python3 -m openclaw_jobsearch.cli review approve <job_slug> --workspace-root . --reason "good fit"
+PYTHONPATH=src python3 -m openclaw_jobsearch.cli review approve deel-automation-specialist-emea-2b131cb2-cc85-41aa-a856-be6029878ec8 --workspace-root . --reason "good fit"
 PYTHONPATH=src python3 -m openclaw_jobsearch.cli review reject <job_slug> --workspace-root . --reason "not a fit"
 PYTHONPATH=src python3 -m openclaw_jobsearch.cli review export --workspace-root .
 ```

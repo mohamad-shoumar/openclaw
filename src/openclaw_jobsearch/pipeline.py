@@ -24,7 +24,7 @@ def run_pipeline(workspace_root: Path, config_dir: Path, data_dir: Path, output_
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     started_at = datetime.now(timezone.utc)
 
-    sources = build_sources(config.watchlist)
+    sources = build_sources(config.watchlist, config.worldwide_companies)
     raw_jobs: list[RawJob] = []
     source_counts: Counter[str] = Counter()
     for source in sources:
@@ -101,6 +101,8 @@ def normalize_job(raw_job: RawJob, run_id: str, rules) -> JobRecord:
         return _normalize_lever(raw_job, run_id)
     if board_type == "ashby":
         return _normalize_ashby(raw_job, run_id)
+    if board_type == "custom_page":
+        return _normalize_custom_page(raw_job, run_id)
     if board_type == "serpapi":
         return _normalize_serpapi(raw_job, run_id)
     if board_type == "remotive":
@@ -123,9 +125,16 @@ def validate_job(job: JobRecord, config: AppConfig) -> JobRecord:
     country_restrictions, timezone_restrictions = _extract_restrictions(location_text, description_text)
     job.country_restrictions = country_restrictions
     job.timezone_restrictions = timezone_restrictions
-    if country_restrictions or timezone_restrictions:
-        snippet = "; ".join(country_restrictions + timezone_restrictions)
+    if country_restrictions:
+        snippet = "; ".join(country_restrictions)
         job.evidence_snippets.append(EvidenceSnippet(field="restriction", snippet=snippet))
+
+    trusted_worldwide_company = config.is_worldwide_company(job.company)
+    if trusted_worldwide_company and job.remote_scope != "restricted" and not country_restrictions:
+        job.remote_scope = "global"
+        job.evidence_snippets.append(
+            EvidenceSnippet(field="company_registry", snippet="Matched verified worldwide company registry.")
+        )
 
     job.lebanon_eligibility = _classify_lebanon_eligibility(searchable_text)
     if job.lebanon_eligibility == "ineligible":
@@ -149,8 +158,6 @@ def validate_job(job: JobRecord, config: AppConfig) -> JobRecord:
         reasons.append("Remote scope is not explicitly global.")
     if country_restrictions:
         reasons.append("Job has country or regional remote restrictions.")
-    if timezone_restrictions:
-        reasons.append("Job has timezone restrictions.")
     if job.lebanon_eligibility == "ineligible":
         reasons.append("Lebanon appears to be ineligible for this role.")
     if _matches_any(searchable_text, rules.hybrid_patterns):
@@ -346,6 +353,29 @@ def _normalize_remotive(raw_job: RawJob, run_id: str) -> JobRecord:
     )
 
 
+def _normalize_custom_page(raw_job: RawJob, run_id: str) -> JobRecord:
+    item = raw_job.payload["job"]
+    description = _clean_text(item.get("description", ""))
+    summary = _clean_text(item.get("summary", "")) or description[:220]
+    location = item.get("location", "")
+    workplace_type = item.get("workplace_type", "unknown")
+    job_url = item.get("job_url", item.get("apply_url", ""))
+    apply_url = item.get("apply_url", job_url)
+    return _base_job_record(
+        raw_job=raw_job,
+        run_id=run_id,
+        company=raw_job.payload.get("company", ""),
+        title=item.get("title", ""),
+        job_url=job_url,
+        apply_url=apply_url,
+        posted_at=_parse_date(item.get("posted_at")),
+        location_raw=location,
+        workplace_type=workplace_type,
+        description_text=description,
+        summary=summary,
+    )
+
+
 def _base_job_record(
     *,
     raw_job: RawJob,
@@ -450,17 +480,13 @@ def _classify_lebanon_eligibility(searchable_text: str) -> str:
 
 def _extract_restrictions(location_text: str, description_text: str) -> tuple[list[str], list[str]]:
     country_hits: list[str] = []
-    timezone_hits: list[str] = []
     combined_text = " ".join(part for part in [location_text, description_text] if part)
     for pattern in ["us only", "uk only", "europe only", "emea", "apac", "must be based in", "authorized to work in"]:
         if pattern in combined_text:
             country_hits.append(pattern)
     if "remote" in location_text and any(token in location_text for token in [",", "usa", "uk", "germany", "france", "india", "denmark", "japan", "finland"]):
         country_hits.append(location_text)
-    for pattern in [r"\btimezone\b", r"\btime zones\b", r"\best\b", r"\bpst\b", r"\bcet\b"]:
-        if re.search(pattern, combined_text):
-            timezone_hits.append(pattern)
-    return country_hits, timezone_hits
+    return country_hits, []
 
 
 def _classify_seniority(title: str) -> str:

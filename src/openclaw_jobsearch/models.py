@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 SourceTier = Literal["ats", "aggregator", "remote_api"]
-BoardType = Literal["greenhouse", "lever", "ashby", "serpapi", "remotive", "unknown"]
+BoardType = Literal["greenhouse", "lever", "ashby", "serpapi", "remotive", "custom_page", "unknown"]
 ValidationStatus = Literal["accepted", "rejected"]
 RemoteScope = Literal["global", "restricted", "unknown"]
 ReviewStatus = Literal["not_queued", "pending_review", "approved", "rejected", "archived"]
@@ -59,10 +59,19 @@ class RemoteApiConfig(BaseModel):
     limit: int = 100
 
 
+class CustomPageConfig(BaseModel):
+    company: str
+    url: str
+    job_link_pattern: str
+    default_location: str = "Remote"
+    default_workplace_type: str = "remote"
+
+
 class WatchlistConfig(BaseModel):
     greenhouse_boards: list[BoardConfig] = Field(default_factory=list)
     lever_boards: list[BoardConfig] = Field(default_factory=list)
     ashby_boards: list[BoardConfig] = Field(default_factory=list)
+    custom_pages: list[CustomPageConfig] = Field(default_factory=list)
     serpapi: SerpApiConfig | None = None
     remote_api: RemoteApiConfig | None = None
 

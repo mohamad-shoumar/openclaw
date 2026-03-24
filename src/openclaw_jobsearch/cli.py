@@ -5,8 +5,10 @@ import os
 from pathlib import Path
 
 from .artifact_generation import generate_phase3_artifacts
+from .config import AppConfig
 from .db import connect, get_job, list_review_jobs, update_review_status
 from .pipeline import export_review_outputs, run_pipeline
+from .registry import audit_worldwide_company_registry
 
 
 def load_dotenv(dotenv_path: Path) -> None:
@@ -112,6 +114,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     phase3_export_parser = phase3_subparsers.add_parser("export", help="Refresh Phase 3 related exports.")
     add_common_path_arguments(phase3_export_parser)
+
+    registry_parser = subparsers.add_parser("registry", help="Worldwide company registry commands.")
+    registry_subparsers = registry_parser.add_subparsers(dest="registry_command", required=True)
+
+    registry_audit_parser = registry_subparsers.add_parser("audit", help="Verify worldwide company source links.")
+    add_common_path_arguments(registry_audit_parser)
+    registry_audit_parser.add_argument("--limit", type=int, help="Optional limit for quick audits.")
     return parser
 
 
@@ -267,6 +276,18 @@ def handle_phase3_export(data_dir: Path, output_dir: Path) -> None:
     )
 
 
+def handle_registry_audit(workspace_root: Path, config_dir: Path, output_dir: Path, limit: int | None) -> None:
+    config = AppConfig(workspace_root=workspace_root, config_dir=config_dir)
+    summary = audit_worldwide_company_registry(config.worldwide_companies, output_dir, limit=limit)
+    print(json_dump(summary))
+
+
+def json_dump(value: dict[str, int]) -> str:
+    import json
+
+    return json.dumps(value, indent=2)
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -296,6 +317,12 @@ def main() -> None:
             handle_review_update(args, data_dir, output_dir, "archived")
         elif args.review_command == "export":
             handle_review_export(data_dir, output_dir)
+        return
+
+    if args.command == "registry":
+        config_dir = workspace_root / args.config_dir
+        if args.registry_command == "audit":
+            handle_registry_audit(workspace_root, config_dir, output_dir, args.limit)
         return
 
     if args.phase3_command == "generate":

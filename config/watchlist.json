@@ -5,6 +5,22 @@
       "board_token": "bitmex"
     },
     {
+      "company": "Circle.so",
+      "board_token": "circleso"
+    },
+    {
+      "company": "GitLab",
+      "board_token": "gitlab"
+    },
+    {
+      "company": "Automattic",
+      "board_token": "automatticcareers"
+    },
+    {
+      "company": "Fingerprint",
+      "board_token": "fingerprint"
+    },
+    {
       "company": "Zscaler",
       "board_token": "zscaler"
     },
@@ -17,6 +33,10 @@
     {
       "company": "Kraken",
       "board_token": "kraken123"
+    },
+    {
+      "company": "Metabase",
+      "board_token": "metabase"
     },
     {
       "company": "Wintermute Trading",
@@ -39,6 +59,15 @@
     {
       "company": "Wincent",
       "board_token": "wincent"
+    }
+  ],
+  "custom_pages": [
+    {
+      "company": "MailerLite",
+      "url": "https://www.mailerlite.com/jobs",
+      "job_link_pattern": "https://www\\.mailerlite\\.com/jobs/[a-z0-9-]+$",
+      "default_location": "Remote",
+      "default_workplace_type": "remote"
     }
   ],
   "serpapi": {

@@ -10,7 +10,7 @@ ProviderName = Literal["openai", "anthropic"]
 
 DEFAULT_MODELS: dict[ProviderName, str] = {
     "openai": "gpt-4.1-mini",
-    "anthropic": "claude-3-5-sonnet-latest",
+    "anthropic": "claude-sonnet-4-6",
 }
 
 

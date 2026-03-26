@@ -45,11 +45,6 @@ pip install -e .
 
 From the repo root:
 
-```bash
-openclaw-jobs run
-```
-
-Or without installing the script:
 
 ```bash
 PYTHONPATH=src python3 -m openclaw_jobsearch.cli run
@@ -57,24 +52,7 @@ PYTHONPATH=src python3 -m openclaw_jobsearch.cli run
 
 ## Useful Commands
 
-Compile the code:
 
-```bash
-python3 -m compileall src
-```
-
-Run with explicit directories:
-
-```bash
-openclaw-jobs run --workspace-root . --config-dir config --data-dir data --output-dir outputs
-```
-
-Run with SerpAPI enabled:
-
-```bash
-export SERPAPI_API_KEY=
-openclaw-jobs run
-```
 ## Outputs
 
 Main generated files:
@@ -116,11 +94,11 @@ Only approved jobs are emitted into `outputs/approved_jobs_latest.jsonl` for Pha
 Phase 3 creates per-job artifacts under `artifacts/jobs/<job_slug>/`:
 
 - `job_description.md`
-- `resume.md`
-- `cover_letter.md`
+- `resume.md` / `resume.html` / `resume.pdf`
+- `cover_letter.md` / `cover_letter.html` / `cover_letter.pdf`
 - `artifact_meta.json`
 
-Phase 3 uses an API-backed LLM generator with grounding metadata:
+Phase 3 uses an API-backed LLM generator with ATS-optimized output and automated PDF rendering:
 
 ```bash
 export OPENAI_API_KEY=

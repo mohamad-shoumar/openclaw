@@ -17,6 +17,9 @@ Phase3Status = Literal["not_started", "generated", "failed"]
 class ProfileConfig(BaseModel):
     candidate_name: str
     location: str
+    email: str = ""
+    phone: str = ""
+    linkedin_url: str = ""
     experience_years: int
     resume_path: str
     resume_text_path: str

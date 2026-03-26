@@ -1,34 +1,74 @@
-Research the company
-Most people rush this part, but it doesn’t need to take long and it gives you useful context for everything else.
+# Resume Tailoring Guide
 
-On the company’s website, pay attention to how they talk about themselves. The language, the values they repeat, how they describe their culture. The careers page is usually the most telling part of any company website (and weirdly, the part most applicants never read).
+## Format (NON-NEGOTIABLE)
 
-Break down the job description
-Separate the real requirements from the nice-to-haves. Stuff listed first or mentioned more than once usually matters most.
+1. **ONE PAGE MAXIMUM** (US Letter 8.5" x 11").
+2. **Section order:** Profile → Professional Experience → Education → Skills.
+3. **3–4 bullet points per role** max.
+4. **Summary (Profile):** 3–4 grammatically correct sentences. No fragments.
 
-I tell clients to create a quick doc where you match key requirements from the posting with your own experiences. It takes maybe five minutes and makes the rest of the tailoring way easier because you’re basically building yourself a cheat sheet.
+## Contact Info
 
-Pay attention to specific tools, technical skills, or methodologies. At bigger companies especially, these get used as screening criteria before a human ever sees your resume.
+- Use EXACTLY the contact details from the candidate profile. NEVER invent or change them. LinkedIn should be clickable link
+- Email: shoumar.mohamad1@gmail.com
+- Phone: +961 81 811 614
+- LinkedIn: https://www.linkedin.com/in/mohamad-shoumar/
+- Location: Beirut, Lebanon
 
-And don’t talk yourself out of applying because you don’t check every box. I see people do this all the time. They look at a posting with fifteen requirements, don’t meet two of them, and decide they’re not qualified. Job descriptions are mostly aspirational, so focus on the core responsibilities and don’t get hung up on the rest.
+## Headline
 
-Line up your title
-If your titles already match the target role, you’re fine.
+- Use ONLY the adapted role title. NO languages, frameworks, or parentheticals.
+- Good: "Full-Stack Developer", "Backend Developer", "Team Lead", "Quantitative Developer"
+- Bad: "Full-Stack Developer (Python · React · FastAPI)", "Backend Engineer – Python, FastAPI"
 
-If they don’t, add a professional headline at the top that connects the dots. So if you’re applying for “Customer Success Manager” but your title is “Client Relations Specialist,” something like “Client Relations Specialist with Customer Success Experience” helps both the human reader and the ATS make the connection.
+## Date Format
 
-Keywords
-Work keywords from the job posting into your resume naturally. Summary, skills section, experience bullets, education.
+- Always use short month names: Sept 2025 – Present, Aug 2024 – Aug 2025
+- NEVER use full month names (September, August, etc.)
 
-The important part is “naturally.” Don’t just dump keywords into your skills list. If a posting keeps mentioning “cross-functional collaboration,” fold that into an actual bullet: “Coordinated cross-functional collaboration between marketing, sales, and product teams to launch new service offerings.”
+## Company Format
 
-Pair keywords with outcomes or numbers whenever you can (more on that in [this Reddit post]). That’s what separates a resume that clears screening from one that also impresses the person reading it.
+- Always include the city: "CoinQuant, Abu Dhabi" — NOT just "CoinQuant"
 
-Mistakes to aviod
-Keyword stuffing doesn’t help you because every keyword needs to connect to something real in your experience. Same thing with over-relying on templates. A Canva template with your text dropped in still reads as generic no matter how well you tailored the content itself.
+## Education
 
-Lying or exaggerating might get you an interview but it won’t get you through one.
+- Preserve EXACT wording from the base resume. Do NOT rephrase.
+- Entry 1: Software Engineering Factory, Full Stack Software Engineering Bootcamp (Nov 2022 – May 2023)
+  - "Completed the boot camp as a Star Developer with a Full stack web app."
+- Entry 2: American University of Beirut, Psychology (2018 – 2021)
 
-And the cover letter thing: if you’re only swapping the company name and sending the same letter every time, recruiters will notice, and it’s not a good look.
+## Skills Section
 
-Formatting matters more than people think too. Inconsistent dates, random font changes, typos. That kind of stuff undermines everything else you did.
+Use exactly these categories in this order:
+- **Languages:** e.g. Python, TypeScript, JavaScript
+- **Frameworks:** e.g. FastAPI, React, React Native
+- **Databases:** e.g. PostgreSQL, Firebase
+- **Tools & Platforms:** e.g. Git, Docker, AWS
+- **Concepts & Methodologies:** e.g. OOP, Microservices, Agile, Scrum
+
+Rules:
+- Order skills within each category from most job-relevant to least.
+- Drop skills that aren't relevant to the job.
+- ONLY include skills the candidate actually has or has genuinely adjacent experience with.
+- Do NOT fabricate skills (no RAG pipelines, vector databases, LangChain if not used).
+
+## Content Tailoring
+
+### Profile / Summary
+- Rewrite for THIS specific job. Lead with the most relevant experience.
+- If the job wants full-stack, lead with full-stack. Don't lead with "algorithmic trading" for a full-stack role.
+- Mention the 2–3 most important technologies the candidate actually has.
+
+### Experience Bullets
+- Rewrite bullets to echo job description language, based on REAL work only.
+- Emphasize the most job-relevant accomplishments.
+- Add bullets for real but underrepresented experience (documentation, testing, etc.) if the job values them.
+- Do NOT invent new accomplishments.
+
+## What NOT to Do
+- Do NOT hallucinate contact info, skills, or experience.
+- Do NOT keep the original title if it doesn't match the target role.
+- Do NOT exceed 1 page.
+- Do NOT use full month names.
+- Do NOT omit the city from company names.
+- Do NOT rephrase education entries.

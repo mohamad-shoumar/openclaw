@@ -1,6 +1,9 @@
 {
   "candidate_name": "Mohamad Shoumar",
   "location": "Beirut, Lebanon",
+  "email": "shoumar.mohamad1@gmail.com",
+  "phone": "+961 81 811 614",
+  "linkedin_url": "https://www.linkedin.com/in/mohamad-shoumar/",
   "experience_years": 3,
   "resume_path": "Mohamad_Shoumar_Team_Lead.pdf",
   "resume_text_path": "Mohamad Shoumar - Resume - Team Lead – Algorithmic Trader.txt",
@@ -9,27 +12,39 @@
     "Backend Engineer",
     "Python Engineer",
     "Backend Developer",
+    "Full Stack Developer",
+    "Full Stack Engineer",
+    "Software Engineer",
     "Trading Systems Engineer",
-    "Algorithmic Trading Engineer",
-    "Software Engineer"
+    "Algorithmic Trading Engineer"
   ],
   "required_skills": [
     "python",
     "fastapi",
     "aws",
+    "react",
+    "typescript",
+    "git",
     "trading systems"
+
   ],
   "preferred_skills": [
     "postgres",
-    "django",
+    "docker",
+    "tailwind",
+    "pytest",
     "asyncio",
+    "django",
     "microservices",
-    "system design"
+    "system design",
+    "react native",
+    "firebase",
+    "vite"
   ],
   "excluded_role_keywords": [
-    "frontend",
     "devops",
     "site reliability",
     "data scientist"
+
   ]
 }

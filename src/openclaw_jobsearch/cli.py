@@ -107,6 +107,25 @@ def build_parser() -> argparse.ArgumentParser:
     phase3_generate_parser = phase3_subparsers.add_parser("generate", help="Generate Phase 3 artifacts.")
     add_common_path_arguments(phase3_generate_parser)
     phase3_generate_parser.add_argument("job_slug", nargs="?", help="Optional approved job slug to generate.")
+    phase3_generate_parser.add_argument(
+        "--provider",
+        choices=["openai", "anthropic"],
+        help="LLM provider override.",
+    )
+    phase3_generate_parser.add_argument(
+        "--model",
+        help="LLM model override.",
+    )
+    phase3_generate_parser.add_argument(
+        "--temperature",
+        type=float,
+        help="LLM temperature override.",
+    )
+    phase3_generate_parser.add_argument(
+        "--max-tokens",
+        type=int,
+        help="LLM max output tokens override.",
+    )
 
     phase3_show_parser = phase3_subparsers.add_parser("show", help="Show Phase 3 status for a job.")
     add_common_path_arguments(phase3_show_parser)
@@ -252,6 +271,10 @@ def handle_phase3_generate(
         data_dir=data_dir,
         output_dir=output_dir,
         job_slug=args.job_slug,
+        llm_provider=args.provider,
+        llm_model=args.model,
+        llm_temperature=args.temperature,
+        llm_max_tokens=args.max_tokens,
     )
     export_review_outputs(data_dir, output_dir)
     print(

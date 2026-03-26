@@ -12,13 +12,12 @@ Current pipeline does:
 - enqueue strict accepted jobs into a manual review queue
 - dedupe and export a shortlist
 - persist results to `SQLite` and `JSONL`
+- generate Phase 3 per-job resume and cover-letter drafts after approval
 
 Current watchlist includes direct boards for companies such as `Circle.so`, `GitLab`, `Automattic`, `Fingerprint`, and `Metabase`, plus a custom careers-page source for `MailerLite`.
 
 Current pipeline does not do:
 
-- cover letters
-- CV tailoring
 - auto-apply
 
 ## Project Layout
@@ -27,7 +26,7 @@ Current pipeline does not do:
 - `src/openclaw_jobsearch/` pipeline code
 - `data/` SQLite database and validated/raw snapshots
 - `outputs/` shortlist and run summary exports
-- `artifacts/jobs/` reserved for later per-job artifacts
+- `artifacts/jobs/` generated per-job Phase 3 artifacts
 
 ## Requirements
 
@@ -86,6 +85,7 @@ Main generated files:
 - `outputs/review_queue_latest.csv`
 - `outputs/applications_export.csv`
 - `outputs/approved_jobs_latest.jsonl`
+- `outputs/phase3_latest.json`
 - `outputs/run_summary_latest.json`
 - `data/validated_jobs_latest.jsonl`
 - `data/jobs.db`
@@ -110,3 +110,35 @@ Review state is separate from strict validation:
 - `review_status` is one of `pending_review`, `approved`, `rejected`, or `archived`
 
 Only approved jobs are emitted into `outputs/approved_jobs_latest.jsonl` for Phase 3 artifact generation.
+
+## Phase 3 Generation
+
+Phase 3 creates per-job artifacts under `artifacts/jobs/<job_slug>/`:
+
+- `job_description.md`
+- `resume.md`
+- `cover_letter.md`
+- `artifact_meta.json`
+
+Phase 3 uses an API-backed LLM generator with grounding metadata:
+
+```bash
+export OPENAI_API_KEY=
+PYTHONPATH=src python3 -m openclaw_jobsearch.cli phase3 generate --workspace-root . --provider openai --model gpt-4.1-mini
+```
+
+Or with Anthropic:
+
+```bash
+export ANTHROPIC_API_KEY=
+PYTHONPATH=src python3 -m openclaw_jobsearch.cli phase3 generate --workspace-root . --provider anthropic
+```
+
+Optional LLM environment variables:
+
+- `OPENCLAW_LLM_PROVIDER`
+- `OPENCLAW_LLM_MODEL`
+- `OPENCLAW_LLM_TEMPERATURE`
+- `OPENCLAW_LLM_MAX_TOKENS`
+
+LLM mode is designed to stay grounded in the source resume text and records provider/model metadata in `artifact_meta.json`.

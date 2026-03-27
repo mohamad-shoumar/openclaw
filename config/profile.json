@@ -9,6 +9,9 @@
   "resume_text_path": "Mohamad Shoumar - Resume - Team Lead – Algorithmic Trader.txt",
   "headline": "Team Lead and backend engineer focused on Python, FastAPI, AWS, and trading systems.",
   "target_roles": [
+    "Automation Specialist",
+    "Automation Engineer",
+    "Integration Engineer",
     "Backend Engineer",
     "Python Engineer",
     "Backend Developer",
@@ -26,20 +29,24 @@
     "typescript",
     "git",
     "trading systems"
-
   ],
   "preferred_skills": [
+    "fastapi",
+    "aws",
     "postgres",
     "docker",
-    "tailwind",
-    "pytest",
+    "webhooks",
+    "etl",
+    "llm automation",
     "asyncio",
     "django",
     "microservices",
     "system design",
+    "react",
+    "typescript",
     "react native",
     "firebase",
-    "vite"
+    "trading systems"
   ],
   "excluded_role_keywords": [
     "devops",

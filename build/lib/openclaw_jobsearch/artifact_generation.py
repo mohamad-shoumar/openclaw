@@ -12,13 +12,7 @@ from .config import AppConfig
 from .db import connect, get_job, list_jobs_ready_for_phase3, update_phase3_artifacts
 from .llm import LlmConfig, generate_json_completion, resolve_llm_config
 from .models import ApprovedJobContract
-from .pdf import (
-    html_to_pdf,
-    render_cover_letter_html,
-    render_cover_letter_html_from_markdown,
-    render_resume_html,
-    render_resume_html_from_markdown,
-)
+from .pdf import html_to_pdf, render_cover_letter_html, render_resume_html
 
 PROMPT_VERSION = "phase3-llm-v2"
 
@@ -161,6 +155,7 @@ def _generate_job_artifacts(
     job_description_path = artifact_dir / "job_description.md"
     resume_md_path = artifact_dir / "resume.md"
     resume_html_path = artifact_dir / "resume.html"
+    resume_pdf_path = artifact_dir / "resume.pdf"
     cover_letter_md_path = artifact_dir / "cover_letter.md"
     cover_letter_html_path = artifact_dir / "cover_letter.html"
     cover_letter_pdf_path = artifact_dir / "cover_letter.pdf"
@@ -183,12 +178,6 @@ def _generate_job_artifacts(
     resume_md_path.write_text(draft.resume_markdown.strip() + "\n", encoding="utf-8")
     cover_letter_md_path.write_text(draft.cover_letter_markdown.strip() + "\n", encoding="utf-8")
 
-    candidate_name_for_pdf = str(draft.resume_data.get("candidate_name", "")).strip() or config.profile.candidate_name
-    headline_for_pdf = str(draft.resume_data.get("headline", "")).strip()
-    resume_pdf_filename = _build_resume_pdf_filename(candidate_name_for_pdf, headline_for_pdf, contract.title)
-    resume_pdf_path = artifact_dir / resume_pdf_filename
-    legacy_resume_pdf_path = artifact_dir / "resume.pdf"
-
     profile_dict = {
         "email": config.profile.email,
         "phone": config.profile.phone,
@@ -203,8 +192,6 @@ def _generate_job_artifacts(
 
     pdf_error = ""
     try:
-        if legacy_resume_pdf_path != resume_pdf_path and legacy_resume_pdf_path.exists():
-            legacy_resume_pdf_path.unlink()
         html_to_pdf(resume_html, resume_pdf_path)
         html_to_pdf(cl_html, cover_letter_pdf_path)
     except RuntimeError as exc:
@@ -260,11 +247,11 @@ def _generate_job_artifacts(
     }
 
 
-def regenerate_artifacts_from_markdown(
+def regenerate_pdfs_from_html(
     workspace_root: Path,
     data_dir: Path,
     job_slug: str,
-) -> dict[str, list[str]]:
+) -> dict[str, str]:
     connection = connect(data_dir / "jobs.db")
     job = get_job(connection, job_slug)
     if job is None:
@@ -274,48 +261,13 @@ def regenerate_artifacts_from_markdown(
     artifact_dir = _resolve_workspace_path(workspace_root, artifact_dir_relative)
 
     regenerated: list[str] = []
-    renderers = {
-        "resume": render_resume_html_from_markdown,
-        "cover_letter": render_cover_letter_html_from_markdown,
-    }
-    for name, renderer in renderers.items():
-        md_path = _resolve_markdown_source_path(artifact_dir, name)
+    for name in ("resume", "cover_letter"):
         html_path = artifact_dir / f"{name}.html"
         pdf_path = artifact_dir / f"{name}.pdf"
-        if not md_path.exists():
-            raise FileNotFoundError(f"Markdown source not found: {md_path}")
-        markdown_content = md_path.read_text(encoding="utf-8")
-        html_content = renderer(markdown_content)
-        html_path.write_text(html_content, encoding="utf-8")
-        if name == "resume":
-            candidate_name, headline = _extract_resume_identity_from_markdown(markdown_content)
-            tailored_resume_pdf_filename = _build_resume_pdf_filename(candidate_name, headline, job.title)
-            pdf_path = artifact_dir / tailored_resume_pdf_filename
-            legacy_pdf_path = artifact_dir / "resume.pdf"
-            if legacy_pdf_path != pdf_path and legacy_pdf_path.exists():
-                legacy_pdf_path.unlink()
-        html_to_pdf(html_content, pdf_path)
-        regenerated.append(str(html_path.relative_to(workspace_root)))
+        if not html_path.exists():
+            raise FileNotFoundError(f"HTML source not found: {html_path}")
+        html_to_pdf(html_path.read_text(encoding="utf-8"), pdf_path)
         regenerated.append(str(pdf_path.relative_to(workspace_root)))
-
-    return {"regenerated": regenerated}
-
-
-def regenerate_all_resumes_from_markdown(workspace_root: Path) -> dict[str, list[str]]:
-    jobs_root = workspace_root / "artifacts" / "jobs"
-    if not jobs_root.exists():
-        raise FileNotFoundError(f"Artifacts jobs directory not found: {jobs_root}")
-
-    regenerated: list[str] = []
-    for artifact_dir in sorted(path for path in jobs_root.iterdir() if path.is_dir()):
-        md_path = artifact_dir / "resume.md"
-        if not md_path.exists():
-            continue
-
-        html_path = artifact_dir / "resume.html"
-        html_content = render_resume_html_from_markdown(md_path.read_text(encoding="utf-8"))
-        html_path.write_text(html_content, encoding="utf-8")
-        regenerated.append(str(html_path.relative_to(workspace_root)))
 
     return {"regenerated": regenerated}
 
@@ -387,13 +339,9 @@ def _generate_llm_artifact_draft(
         "   - Tools & Platforms (e.g. Git, Docker, AWS)\n"
         "   - Concepts & Methodologies (e.g. OOP, Microservices, Agile, Scrum)\n"
         "   Order skills within each category from most job-relevant to least. "
-        "Drop skills that aren't relevant to the job. "
-        "If the source resume includes completed tooling coursework (e.g. Zapier), "
-        "you may include that tooling in skills when relevant to the target role.\n"
+        "Drop skills that aren't relevant to the job.\n"
         "8. EDUCATION: Preserve the exact same wording and structure from the source resume. "
-        "Use the same school names, degree names, and notes. Do not rephrase. "
-        "If the source resume includes relevant training/courses/certifications, "
-        "include them concisely under Education (note or additional entry).\n"
+        "Use the same school names, degree names, and notes. Do not rephrase.\n"
         "9. EXPERIENCE: 3-4 bullets per role MAX. Rewrite bullets to echo job description language "
         "but ONLY based on real work. Add bullets for underrepresented real experience "
         "(e.g. documentation, testing) if the job values them.\n"
@@ -477,9 +425,12 @@ def _generate_llm_artifact_draft(
             "- Add bullets for real but underrepresented experience if the job values them.",
             "",
             "EDUCATION (preserve exact wording from source resume):",
-            "- Keep degree entries faithful to the source resume (same school/degree/dates wording).",
-            "- If source resume includes relevant training/courses/certifications, include them concisely.",
-            "- Do NOT invent courses or credentials.",
+            "- Entry 1: school='Software Engineering Factory', degree='Full Stack Software Engineering Bootcamp',",
+            "  dates='Nov 2022 – May 2023',",
+            "  note='Completed the boot camp as a Star Developer with a Full stack web app.'",
+            "- Entry 2: school='American University of Beirut', degree='Psychology',",
+            "  dates='2018 – 2021', note=''",
+            "- Do NOT rephrase. Use these exact values.",
             "",
             "SKILLS (use exactly these category names in this order):",
             "- Languages: (e.g. Python, TypeScript, JavaScript)",
@@ -669,98 +620,3 @@ def _relative_path(path: Path, workspace_root: Path) -> str:
         return str(path.relative_to(workspace_root))
     except ValueError:
         return str(path)
-
-
-def _build_resume_pdf_filename(candidate_name: str, tailored_headline: str, fallback_title: str) -> str:
-    safe_candidate = _sanitize_filename_part(candidate_name, spaces_to="_") or "Candidate"
-    primary_title = _primary_title_for_filename(tailored_headline) or _primary_title_for_filename(fallback_title)
-    safe_title = _sanitize_filename_part(primary_title, spaces_to=" ") or "Tailored Resume"
-    return f"{safe_candidate}_{safe_title}.pdf"
-
-
-def _primary_title_for_filename(value: str) -> str:
-    text = _clean_text(value)
-    if not text:
-        return ""
-    for separator in (" | ", " - ", " – ", " — ", " / ", " & ", ","):
-        if separator not in text:
-            continue
-        candidate = text.split(separator, 1)[0].strip()
-        if candidate:
-            return candidate
-    return text
-
-
-def _sanitize_filename_part(value: str, *, spaces_to: str) -> str:
-    normalized = (
-        value.replace("\u2014", "-")
-        .replace("\u2013", "-")
-        .replace("\u2212", "-")
-    )
-    normalized = re.sub(r'[\\/:*?"<>|]+', " ", normalized)
-    normalized = re.sub(r"\s+", " ", normalized).strip().strip(".")
-    if spaces_to == "_":
-        normalized = normalized.replace(" ", "_")
-    return normalized
-
-
-def _extract_resume_identity_from_markdown(markdown_content: str) -> tuple[str, str]:
-    lines = markdown_content.splitlines()
-    candidate_name = ""
-    headline = ""
-    start_index = 0
-
-    for idx, raw_line in enumerate(lines):
-        line = raw_line.strip()
-        if line.startswith("# "):
-            candidate_name = _strip_markdown_inline(line[2:])
-            start_index = idx + 1
-            break
-
-    for raw_line in lines[start_index:]:
-        line = raw_line.strip()
-        if not line or line == "---":
-            continue
-        if line.startswith("## "):
-            break
-        if _looks_like_contact_line(line):
-            if headline:
-                break
-            continue
-        headline = _strip_markdown_inline(line.lstrip("#").strip())
-        if headline:
-            break
-
-    return candidate_name, headline
-
-
-def _strip_markdown_inline(value: str) -> str:
-    cleaned = value.strip()
-    cleaned = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", lambda match: match.group(1) or match.group(2), cleaned)
-    cleaned = cleaned.replace("**", "").replace("__", "").replace("*", "").replace("`", "")
-    return re.sub(r"\s+", " ", cleaned).strip()
-
-
-def _looks_like_contact_line(value: str) -> bool:
-    lowered = value.lower()
-    return "@" in value or "|" in value or "linkedin.com" in lowered
-
-
-def _resolve_markdown_source_path(artifact_dir: Path, name: str) -> Path:
-    default_path = artifact_dir / f"{name}.md"
-    if default_path.exists() or name != "resume":
-        return default_path
-
-    resume_markdown_candidates = [
-        candidate
-        for candidate in sorted(artifact_dir.glob("*.md"))
-        if candidate.name not in {"cover_letter.md", "job_description.md"}
-    ]
-    if len(resume_markdown_candidates) == 1:
-        return resume_markdown_candidates[0]
-
-    for candidate in resume_markdown_candidates:
-        if "resume" in candidate.stem.lower():
-            return candidate
-
-    return default_path

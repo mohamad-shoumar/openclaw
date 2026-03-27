@@ -3,9 +3,8 @@
 ## Format (NON-NEGOTIABLE)
 
 1. **ONE PAGE MAXIMUM** (US Letter 8.5" x 11").
-2. **Section order:** Profile → Professional Experience → Education → Skills.
+2. **Section order:**  Experience → Skills → Education.
 3. **3–4 bullet points per role** max.
-4. **Summary (Profile):** 3–4 grammatically correct sentences. No fragments.
 
 ## Contact Info
 
@@ -18,8 +17,8 @@
 ## Headline
 
 - Use ONLY the adapted role title. NO languages, frameworks, or parentheticals.
-- Good: "Full-Stack Developer", "Backend Developer", "Team Lead", "Quantitative Developer"
-- Bad: "Full-Stack Developer (Python · React · FastAPI)", "Backend Engineer – Python, FastAPI"
+- Good: "Full-Stack Developer", "Backend Developer", "Team Lead", "Quantitative Developer",
+- Bad: "Backend & Date Engineer",  "Full-Stack Developer (Python · React · FastAPI)", "Backend Engineer – Python, FastAPI", "Automation & Backend Engineer"
 
 ## Date Format
 
@@ -51,13 +50,14 @@ Rules:
 - Drop skills that aren't relevant to the job.
 - ONLY include skills the candidate actually has or has genuinely adjacent experience with.
 - Do NOT fabricate skills (no RAG pipelines, vector databases, LangChain if not used).
+- If the source resume includes completed courses on a tool (e.g. Zapier), include that tool in Skills when it is relevant to the job.
+
+## Professional Development
+
+- If the source resume includes relevant coursework/certifications, include one concise Education entry or note for it.
+- Keep the wording faithful to the source resume. Do not invent training details.
 
 ## Content Tailoring
-
-### Profile / Summary
-- Rewrite for THIS specific job. Lead with the most relevant experience.
-- If the job wants full-stack, lead with full-stack. Don't lead with "algorithmic trading" for a full-stack role.
-- Mention the 2–3 most important technologies the candidate actually has.
 
 ### Experience Bullets
 - Rewrite bullets to echo job description language, based on REAL work only.

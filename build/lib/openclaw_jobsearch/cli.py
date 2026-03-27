@@ -4,11 +4,7 @@ import argparse
 import os
 from pathlib import Path
 
-from .artifact_generation import (
-    generate_phase3_artifacts,
-    regenerate_all_resumes_from_markdown,
-    regenerate_artifacts_from_markdown,
-)
+from .artifact_generation import generate_phase3_artifacts, regenerate_pdfs_from_html
 from .config import AppConfig
 from .db import connect, get_job, list_review_jobs, update_review_status
 from .pipeline import export_review_outputs, run_pipeline
@@ -135,17 +131,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_path_arguments(phase3_show_parser)
     phase3_show_parser.add_argument("job_slug", help="Job slug to inspect.")
 
-    phase3_regen_pdf_parser = phase3_subparsers.add_parser(
-        "regen-pdf",
-        help="Regenerate HTML and PDFs from existing markdown artifacts.",
-    )
+    phase3_regen_pdf_parser = phase3_subparsers.add_parser("regen-pdf", help="Regenerate PDFs from existing HTML artifacts.")
     add_common_path_arguments(phase3_regen_pdf_parser)
-    phase3_regen_pdf_parser.add_argument("job_slug", nargs="?", help="Job slug to regenerate PDFs for.")
-    phase3_regen_pdf_parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Regenerate all resume HTML artifacts under artifacts/jobs from resume.md files.",
-    )
+    phase3_regen_pdf_parser.add_argument("job_slug", help="Job slug to regenerate PDFs for.")
 
     phase3_export_parser = phase3_subparsers.add_parser("export", help="Refresh Phase 3 related exports.")
     add_common_path_arguments(phase3_export_parser)
@@ -308,17 +296,9 @@ def handle_phase3_show(args: argparse.Namespace, data_dir: Path) -> None:
 
 
 def handle_phase3_regen_pdf(args: argparse.Namespace, workspace_root: Path, data_dir: Path) -> None:
-    if args.all:
-        result = regenerate_all_resumes_from_markdown(workspace_root)
-    elif args.job_slug:
-        result = regenerate_artifacts_from_markdown(workspace_root, data_dir, args.job_slug)
-    else:
-        raise SystemExit("Provide a job_slug or pass --all.")
-
+    result = regenerate_pdfs_from_html(workspace_root, data_dir, args.job_slug)
     for path in result["regenerated"]:
         print(f"Regenerated: {path}")
-    for item in result.get("failed", []):
-        print(f"Failed: {item}")
 
 
 def handle_phase3_export(data_dir: Path, output_dir: Path) -> None:

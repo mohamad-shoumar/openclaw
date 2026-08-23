@@ -2,25 +2,16 @@
   "strict_mode": true,
   "max_job_age_days": 30,
   "priority_job_age_days": 14,
-  "max_required_experience_years": 5,
+  "max_required_experience_years": 3,
   "allowed_remote_scopes": [
-    "global",
-    "open"
+    "global"
   ],
   "rejected_title_keywords": [
     "senior",
-    "sr",
-    "sr.",
     "staff",
     "principal",
     "director",
-    "manager",
-    "head of",
-    "vp",
-    "architect",
-    "lead",
-    "iii",
-    "iv"
+    "manager"
   ],
   "required_skill_keywords": [
     "python"
@@ -41,13 +32,20 @@
     "asyncio",
     "trading",
     "backend",
-    "microservices",
-    "react",
-    "typescript",
-    "postgres",
-    "docker"
+    "microservices"
   ],
-  "rejected_primary_stack_keywords": [],
+  "rejected_primary_stack_keywords": [
+    "node.js",
+    "nodejs",
+    "javascript",
+    "typescript",
+    "java",
+    "frontend",
+    "react",
+    "angular",
+    "devops",
+    "sre"
+  ],
   "remote_restriction_patterns": [
     "us only",
     "united states only",
@@ -68,14 +66,9 @@
     "hybrid",
     "on-site",
     "onsite",
+    "office",
     "in-office",
-    "come into the office",
-    "from our office",
-    "based in our office",
-    "days in the office",
-    "days per week in the office",
-    "in the office each week",
-    "relocation required"
+    "come into the office"
   ],
   "global_remote_patterns": [
     "remote - global",
@@ -83,12 +76,10 @@
     "remote worldwide",
     "work from anywhere",
     "global remote",
-    "anywhere in the world",
-    "fully remote",
-    "remote-first",
-    "100% remote"
+    "anywhere in the world"
   ],
   "lebanon_block_patterns": [
+    "lebanon",
     "middle east"
   ]
 }

@@ -12,7 +12,15 @@ from .artifact_generation import (
 from .config import AppConfig
 from .db import connect, get_job, list_review_jobs, update_review_status
 from .pipeline import export_review_outputs, run_pipeline
+from .feedback import FeedbackStore, RULE_KINDS, derive_value, summarize
 from .registry import audit_worldwide_company_registry
+from .replay import (
+    config_with_rules,
+    format_comparison,
+    format_result,
+    load_stored_jobs,
+    replay,
+)
 
 
 def load_dotenv(dotenv_path: Path) -> None:
@@ -57,6 +65,75 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run", help="Run the strict pipeline.")
     add_common_path_arguments(run_parser)
+
+    replay_parser = subparsers.add_parser(
+        "replay",
+        help="Re-score stored jobs against a candidate rules file. Offline, no network.",
+    )
+    add_common_path_arguments(replay_parser)
+    replay_parser.add_argument(
+        "--rules",
+        help="Candidate rules JSON to test. Omit to score with the active config/rules.json.",
+    )
+    replay_parser.add_argument(
+        "--baseline",
+        help="Rules JSON to compare against. Defaults to the active config/rules.json.",
+    )
+    replay_parser.add_argument(
+        "--sample",
+        type=int,
+        default=15,
+        help="How many newly accepted jobs to list in the comparison.",
+    )
+
+    serve_parser = subparsers.add_parser("serve", help="Run the review UI API server.")
+    add_common_path_arguments(serve_parser)
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8099)
+    serve_parser.add_argument("--reload", action="store_true", help="Auto-reload on code changes.")
+
+    feedback_parser = subparsers.add_parser(
+        "feedback",
+        help="Record reviewer feedback as reusable rules that block whole classes of jobs.",
+    )
+    feedback_subparsers = feedback_parser.add_subparsers(dest="feedback_command", required=True)
+
+    feedback_add_parser = feedback_subparsers.add_parser("add", help="Add a feedback rule by explicit value.")
+    add_common_path_arguments(feedback_add_parser)
+    feedback_add_parser.add_argument("--kind", required=True, choices=sorted(RULE_KINDS))
+    feedback_add_parser.add_argument("--value", required=True, help="Domain, company, title phrase, or source.")
+    feedback_add_parser.add_argument("--reason", required=True, help="Why this class of job is unwanted.")
+
+    feedback_from_job_parser = feedback_subparsers.add_parser(
+        "from-job",
+        help="Reject a job and generalize it into a rule derived from that job.",
+    )
+    add_common_path_arguments(feedback_from_job_parser)
+    feedback_from_job_parser.add_argument("job_slug")
+    feedback_from_job_parser.add_argument("--kind", required=True, choices=sorted(RULE_KINDS))
+    feedback_from_job_parser.add_argument("--reason", required=True)
+    feedback_from_job_parser.add_argument(
+        "--value",
+        help="Override the derived value. Required for title_pattern.",
+    )
+
+    feedback_list_parser = feedback_subparsers.add_parser("list", help="Show all feedback rules.")
+    add_common_path_arguments(feedback_list_parser)
+
+    feedback_remove_parser = feedback_subparsers.add_parser("remove", help="Delete a feedback rule by id.")
+    add_common_path_arguments(feedback_remove_parser)
+    feedback_remove_parser.add_argument("rule_id")
+
+    feedback_apply_parser = feedback_subparsers.add_parser(
+        "apply",
+        help="Retro-apply rules to jobs already stored: revoke every matching queued job.",
+    )
+    add_common_path_arguments(feedback_apply_parser)
+    feedback_apply_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be revoked without writing anything.",
+    )
 
     review_parser = subparsers.add_parser("review", help="Review queue commands.")
     review_subparsers = review_parser.add_subparsers(dest="review_command", required=True)
@@ -341,6 +418,126 @@ def json_dump(value: dict[str, int]) -> str:
     return json.dumps(value, indent=2)
 
 
+REVOCABLE_STATUSES = ("pending_review", "approved")
+
+
+def handle_serve(args) -> None:
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise SystemExit(
+            "The review UI needs FastAPI and uvicorn:\n"
+            "  pip install 'fastapi>=0.115' 'uvicorn[standard]>=0.32'"
+        ) from exc
+
+    workspace_root, _, _ = resolve_paths(args)
+    os.environ["OPENCLAW_WORKSPACE_ROOT"] = str(workspace_root)
+    print(f"API on http://{args.host}:{args.port}  (workspace {workspace_root})")
+    print("Start the UI with:  cd frontend && npm run dev   ->  http://localhost:5173")
+    uvicorn.run(
+        "openclaw_jobsearch.web.app:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+    )
+
+
+def handle_feedback(args) -> None:
+    workspace_root, data_dir, output_dir = resolve_paths(args)
+    config_dir = workspace_root / args.config_dir
+    store = FeedbackStore.load(config_dir)
+
+    if args.feedback_command == "list":
+        print(summarize(store.rules))
+        return
+
+    if args.feedback_command == "remove":
+        if store.remove(args.rule_id):
+            store.save()
+            print(f"removed {args.rule_id}")
+        else:
+            print(f"no such rule: {args.rule_id}")
+        return
+
+    if args.feedback_command == "add":
+        rule = store.add(args.kind, args.value, args.reason)
+        store.save()
+        print(f"added {rule.id}: {rule.kind}={rule.value}")
+        _apply_feedback(store, data_dir, output_dir, dry_run=False)
+        return
+
+    if args.feedback_command == "from-job":
+        connection = connect(data_dir / "jobs.db")
+        job = get_job(connection, args.job_slug)
+        if job is None:
+            raise SystemExit(f"Unknown job slug: {args.job_slug}")
+        value = args.value or derive_value(job, args.kind)
+        if not value:
+            raise SystemExit(f"Could not derive a {args.kind} from {args.job_slug}; pass --value.")
+        rule = store.add(args.kind, value, args.reason, origin_job=job.job_slug)
+        store.save()
+        print(f"added {rule.id}: {rule.kind}={rule.value}  (from {job.company} - {job.title})")
+        _apply_feedback(store, data_dir, output_dir, dry_run=False)
+        return
+
+    if args.feedback_command == "apply":
+        _apply_feedback(store, data_dir, output_dir, dry_run=args.dry_run)
+        return
+
+
+def _apply_feedback(store: FeedbackStore, data_dir: Path, output_dir: Path, *, dry_run: bool) -> None:
+    """Revoke every queued job that matches a feedback rule."""
+    if not store.rules:
+        print("no feedback rules to apply")
+        return
+
+    connection = connect(data_dir / "jobs.db")
+    revoked: list[tuple[str, str, str]] = []
+    for status in REVOCABLE_STATUSES:
+        for job in list_review_jobs(connection, status=status):
+            rule = store.match(job)
+            if rule is None:
+                continue
+            revoked.append((job.job_slug, f"{job.company} - {job.title}", rule.id))
+            if not dry_run:
+                update_review_status(
+                    connection,
+                    job.job_slug,
+                    "rejected",
+                    reason=f"feedback:{rule.id} {rule.reason}",
+                    decision_by="feedback",
+                )
+
+    verb = "would revoke" if dry_run else "revoked"
+    print(f"{verb} {len(revoked)} queued job(s)")
+    for slug, label, rule_id in revoked:
+        print(f"  [{rule_id}] {label[:74]}")
+    if revoked and not dry_run:
+        export_review_outputs(data_dir=data_dir, output_dir=output_dir)
+
+
+def handle_replay(args) -> None:
+    workspace_root, _, _ = resolve_paths(args)
+    config_dir = workspace_root / args.config_dir
+    base_config = AppConfig(workspace_root=workspace_root, config_dir=config_dir)
+
+    jobs = load_stored_jobs(workspace_root)
+    print(f"loaded {len(jobs)} stored jobs from data/jobs.db\n")
+
+    baseline_config = config_with_rules(base_config, Path(args.baseline)) if args.baseline else base_config
+    baseline_label = Path(args.baseline).name if args.baseline else "baseline (config/rules.json)"
+    baseline = replay(jobs, baseline_config, label=baseline_label)
+    print(format_result(baseline))
+
+    if not args.rules:
+        return
+
+    candidate = replay(jobs, config_with_rules(base_config, Path(args.rules)), label=Path(args.rules).name)
+    print()
+    print(format_result(candidate))
+    print(format_comparison(baseline, candidate, sample=args.sample))
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -354,6 +551,18 @@ def main() -> None:
             output_dir=output_dir,
         )
         print(summary.model_dump_json(indent=2))
+        return
+
+    if args.command == "replay":
+        handle_replay(args)
+        return
+
+    if args.command == "serve":
+        handle_serve(args)
+        return
+
+    if args.command == "feedback":
+        handle_feedback(args)
         return
 
     workspace_root, data_dir, output_dir = resolve_paths(args)

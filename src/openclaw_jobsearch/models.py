@@ -7,9 +7,17 @@ from pydantic import BaseModel, Field
 
 
 SourceTier = Literal["ats", "aggregator", "remote_api"]
-BoardType = Literal["greenhouse", "lever", "ashby", "serpapi", "remotive", "custom_page", "unknown"]
+BoardType = Literal[
+    "greenhouse", "lever", "ashby", "serpapi", "remotive", "custom_page",
+    "himalayas", "remoteok", "weworkremotely", "hackernews",
+    "unknown",
+]
 ValidationStatus = Literal["accepted", "rejected"]
-RemoteScope = Literal["global", "restricted", "unknown"]
+# "global"     explicit worldwide/work-from-anywhere phrasing
+# "open"       remote role with no geographic restriction found (absence of evidence)
+# "restricted" positive evidence of a geographic limit
+# "unknown"    no remote signal at all
+RemoteScope = Literal["global", "open", "restricted", "unknown"]
 ReviewStatus = Literal["not_queued", "pending_review", "approved", "rejected", "archived"]
 Phase3Status = Literal["not_started", "generated", "failed"]
 
@@ -62,6 +70,15 @@ class RemoteApiConfig(BaseModel):
     limit: int = 100
 
 
+class RemoteBoardConfig(BaseModel):
+    """Config for the no-auth remote-native board APIs and feeds."""
+
+    enabled: bool = True
+    limit: int = 200
+    queries: list[str] = Field(default_factory=lambda: ["python backend"])
+    feeds: list[str] = Field(default_factory=list)
+
+
 class CustomPageConfig(BaseModel):
     company: str
     url: str
@@ -77,6 +94,10 @@ class WatchlistConfig(BaseModel):
     custom_pages: list[CustomPageConfig] = Field(default_factory=list)
     serpapi: SerpApiConfig | None = None
     remote_api: RemoteApiConfig | None = None
+    himalayas: RemoteBoardConfig | None = None
+    remoteok: RemoteBoardConfig | None = None
+    weworkremotely: RemoteBoardConfig | None = None
+    hackernews: RemoteBoardConfig | None = None
 
 
 class EvidenceSnippet(BaseModel):
@@ -128,6 +149,10 @@ class JobRecord(BaseModel):
     review_decision_by: str | None = None
     review_notes: str = ""
     approval_reason: str = ""
+    # "Approved" only means the job cleared review. applied_at records that an
+    # application was actually submitted, which is the number that matters.
+    applied_at: datetime | None = None
+    applied_notes: str = ""
     phase3_ready: bool = False
     phase3_status: Phase3Status = "not_started"
     phase3_generated_at: datetime | None = None

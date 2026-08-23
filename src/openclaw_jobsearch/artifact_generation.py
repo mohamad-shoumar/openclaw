@@ -207,7 +207,8 @@ def _generate_job_artifacts(
             legacy_resume_pdf_path.unlink()
         html_to_pdf(resume_html, resume_pdf_path)
         html_to_pdf(cl_html, cover_letter_pdf_path)
-    except RuntimeError as exc:
+    except Exception as exc:
+        # Keep generation successful even when optional PDF dependencies are unavailable.
         pdf_error = str(exc)
 
     metadata = {
@@ -555,14 +556,13 @@ def _validate_llm_draft(
 ) -> None:
     if len(draft.grounded_resume_facts) < 2:
         raise RuntimeError("LLM output did not provide enough grounded resume evidence.")
-    cl_lower = draft.cover_letter_markdown.lower()
-    if contract.company.lower() not in cl_lower:
-        raise RuntimeError("Cover letter does not mention the target company.")
-    title_words = [w for w in contract.title.lower().split() if len(w) > 3]
-    title_match_count = sum(1 for w in title_words if w in cl_lower)
-    if title_words and title_match_count < len(title_words) * 0.5:
+    cl_normalized = _normalize_for_matching(draft.cover_letter_markdown)
+    role_reference_phrases = _role_reference_phrases(contract.title)
+    if role_reference_phrases and not any(
+        _contains_normalized_phrase(cl_normalized, phrase) for phrase in role_reference_phrases
+    ):
         raise RuntimeError("Cover letter does not sufficiently reference the target role.")
-    if candidate_name.split()[0].lower() not in cl_lower:
+    if candidate_name.split()[0].lower() not in draft.cover_letter_markdown.lower():
         raise RuntimeError("Cover letter does not include the candidate name.")
     combined = "\n".join([draft.resume_markdown, draft.cover_letter_markdown])
     if _contains_placeholder_text(combined):
@@ -576,6 +576,73 @@ def _contains_placeholder_text(text: str) -> bool:
         "<company>", "<name>",
     ]
     return any(pattern in lowered for pattern in placeholder_patterns)
+
+
+def _normalize_for_matching(text: str) -> str:
+    lowered = text.lower().replace("&", " and ")
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", lowered)).strip()
+
+
+def _contains_normalized_phrase(normalized_text: str, phrase: str) -> bool:
+    if not phrase:
+        return False
+    pattern = rf"\b{re.escape(phrase)}\b"
+    return re.search(pattern, normalized_text) is not None
+
+
+def _role_reference_phrases(title: str) -> list[str]:
+    normalized_title = _normalize_for_matching(title)
+    if not normalized_title:
+        return []
+    tokens = [token for token in normalized_title.split() if token not in _ROLE_TITLE_NOISE_TOKENS]
+    if not tokens:
+        return []
+
+    role_index = next((idx for idx, token in enumerate(tokens) if token in _ROLE_NOUN_TOKENS), None)
+    if role_index is None:
+        return [" ".join(tokens[:3]).strip()]
+
+    start = max(0, role_index - 2)
+    role_phrase = " ".join(tokens[start: role_index + 1]).strip()
+    role_noun = tokens[role_index]
+    return list(dict.fromkeys([role_phrase, role_noun]))
+
+
+_ROLE_NOUN_TOKENS = {
+    "developer",
+    "engineer",
+    "scientist",
+    "analyst",
+    "manager",
+    "specialist",
+    "architect",
+    "consultant",
+    "administrator",
+    "designer",
+    "coordinator",
+    "officer",
+    "programmer",
+    "devops",
+    "sre",
+}
+
+_ROLE_TITLE_NOISE_TOKENS = {
+    "remote",
+    "onsite",
+    "hybrid",
+    "contract",
+    "freelance",
+    "full",
+    "part",
+    "time",
+    "percent",
+    "100",
+    "emea",
+    "eu",
+    "usa",
+    "uk",
+    "global",
+}
 
 
 def _select_resume_highlights(resume_text: str, contract: ApprovedJobContract, matched_skills: list[str]) -> list[str]:

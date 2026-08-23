@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .feedback import FeedbackStore
 from .models import ProfileConfig, RulesConfig, WatchlistConfig
 from .registry import load_worldwide_company_registry, normalize_company_name
 
@@ -23,6 +24,7 @@ class AppConfig:
         self.worldwide_company_index = {
             company.company_key: company for company in self.worldwide_companies
         }
+        self.feedback = FeedbackStore.load(config_dir)
 
     @property
     def resume_path(self) -> Path:

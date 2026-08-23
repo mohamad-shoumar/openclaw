@@ -8,7 +8,7 @@ import os
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
-from urllib.parse import urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import quote_plus, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from .models import BoardConfig, CustomPageConfig, RawJob, WatchlistConfig
@@ -400,6 +400,10 @@ def build_sources(
         GenericCareerSource(generic_companies),
         SerpApiSource(watchlist.serpapi),
         RemotiveSource(watchlist.remote_api),
+        HimalayasSource(watchlist.himalayas),
+        RemoteOkSource(watchlist.remoteok),
+        WeWorkRemotelySource(watchlist.weworkremotely),
+        HackerNewsHiringSource(watchlist.hackernews),
     ]
 
 
@@ -782,3 +786,264 @@ def _looks_like_job_detail_page(html_text: str, url: str) -> bool:
         return True
     path = urlsplit(url).path.lower()
     return bool(re.search(r"/(job|jobs|careers?|positions?|openings?)/[^/]{10,}", path)) and len(text) > 1200
+
+
+# ---------------------------------------------------------------------------
+# Remote-native board APIs and feeds.
+#
+# No-auth public endpoints, verified live against current docs. These are the
+# highest-signal non-ATS sources: structured, employer-linked, and free of the
+# reposter noise that generic HTML crawling and SerpApi pull in.
+# ---------------------------------------------------------------------------
+
+
+class HimalayasSource(SourceAdapter):
+    """Himalayas search API.
+
+    The browse endpoint caps `limit` at 20 while reporting a totalCount above
+    100k, so enumerating it is hopeless. Search is the only sane entry point:
+    one request per query, filtered server-side.
+    """
+
+    name = "himalayas"
+
+    def __init__(self, config):
+        self.config = config
+
+    def fetch(self) -> list[RawJob]:
+        if not self.config or not self.config.enabled:
+            return []
+        jobs: list[RawJob] = []
+        seen: set[str] = set()
+        for query in self.config.queries:
+            url = f"https://himalayas.app/jobs/api/search?q={quote_plus(query)}"
+            try:
+                payload = fetch_json(url)
+            except Exception:
+                continue
+            for item in payload.get("jobs", [])[: self.config.limit]:
+                external_id = str(item.get("guid") or item.get("applicationLink") or "")
+                if not external_id or external_id in seen:
+                    continue
+                seen.add(external_id)
+                jobs.append(
+                    RawJob(
+                        discovery_source=self.name,
+                        source_tier="remote_api",
+                        board_type="himalayas",
+                        external_id=external_id,
+                        fetched_at=datetime.now(timezone.utc),
+                        payload={"job": item, "query": query},
+                    )
+                )
+        return jobs
+
+
+class RemoteOkSource(SourceAdapter):
+    """RemoteOK public JSON.
+
+    Index 0 of the array is a legal/attribution notice, not a job.
+    """
+
+    name = "remoteok"
+
+    def __init__(self, config):
+        self.config = config
+
+    def fetch(self) -> list[RawJob]:
+        if not self.config or not self.config.enabled:
+            return []
+        try:
+            payload = fetch_json("https://remoteok.com/api")
+        except Exception:
+            return []
+        if not isinstance(payload, list) or len(payload) < 2:
+            return []
+        # RemoteOK's public feed is the ~100 most recent jobs site-wide, every
+        # category included (barbers, lifeguards). Filter client-side against the
+        # configured queries so the archive does not fill with roles no rule
+        # would ever accept. Yield is genuinely low; the request is cheap.
+        terms = [t.lower() for q in self.config.queries for t in q.split()]
+        jobs: list[RawJob] = []
+        for item in payload[1:]:
+            if not isinstance(item, dict):
+                continue
+            external_id = str(item.get("id") or item.get("slug") or "")
+            if not external_id:
+                continue
+            if terms:
+                haystack = " ".join(
+                    [
+                        str(item.get("position", "")),
+                        str(item.get("description", "")),
+                        " ".join(str(t) for t in (item.get("tags") or [])),
+                    ]
+                ).lower()
+                if not any(term in haystack for term in terms):
+                    continue
+            if len(jobs) >= self.config.limit:
+                break
+            jobs.append(
+                RawJob(
+                    discovery_source=self.name,
+                    source_tier="remote_api",
+                    board_type="remoteok",
+                    external_id=external_id,
+                    fetched_at=datetime.now(timezone.utc),
+                    payload={"job": item},
+                )
+            )
+        return jobs
+
+
+class WeWorkRemotelySource(SourceAdapter):
+    """We Work Remotely category RSS. Static XML, no auth, no key."""
+
+    name = "weworkremotely"
+
+    DEFAULT_FEEDS = (
+        "https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss",
+        "https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss",
+        "https://weworkremotely.com/categories/remote-programming-jobs.rss",
+    )
+
+    def __init__(self, config):
+        self.config = config
+
+    def fetch(self) -> list[RawJob]:
+        if not self.config or not self.config.enabled:
+            return []
+        feeds = self.config.feeds or list(self.DEFAULT_FEEDS)
+        jobs: list[RawJob] = []
+        seen: set[str] = set()
+        for feed_url in feeds:
+            try:
+                xml_text = fetch_html(feed_url)
+            except Exception:
+                continue
+            for item in _rss_items(xml_text)[: self.config.limit]:
+                link = item.get("link", "")
+                if not link or link in seen:
+                    continue
+                seen.add(link)
+                jobs.append(
+                    RawJob(
+                        discovery_source=self.name,
+                        source_tier="remote_api",
+                        board_type="weworkremotely",
+                        external_id=link,
+                        fetched_at=datetime.now(timezone.utc),
+                        payload={"job": item, "feed": feed_url},
+                    )
+                )
+        return jobs
+
+
+class HackerNewsHiringSource(SourceAdapter):
+    """Hacker News "Ask HN: Who is hiring?" via the Algolia API.
+
+    Each top-level comment on the monthly thread is one job posting.
+    """
+
+    name = "hackernews"
+
+    def __init__(self, config):
+        self.config = config
+
+    def fetch(self) -> list[RawJob]:
+        if not self.config or not self.config.enabled:
+            return []
+        try:
+            search = fetch_json(
+                "https://hn.algolia.com/api/v1/search_by_date"
+                "?query=%22Ask%20HN%3A%20Who%20is%20hiring%22&tags=story&hitsPerPage=5"
+            )
+        except Exception:
+            return []
+
+        # The same monthly cadence produces "Who wants to be hired?" and
+        # "Freelancer? Seeking freelancer?" threads whose comments are candidates
+        # advertising themselves, not job postings. Exclude them by title.
+        thread_ids = [
+            str(hit.get("objectID"))
+            for hit in search.get("hits", [])
+            if "who is hiring" in (hit.get("title") or "").lower()
+            and "wants to be hired" not in (hit.get("title") or "").lower()
+            and "freelancer" not in (hit.get("title") or "").lower()
+            and hit.get("objectID")
+        ]
+
+        jobs: list[RawJob] = []
+        for thread_id in thread_ids[:2]:
+            try:
+                thread = fetch_json(f"https://hn.algolia.com/api/v1/items/{thread_id}")
+            except Exception:
+                continue
+            for child in (thread.get("children") or [])[: self.config.limit]:
+                if not child.get("text") or child.get("author") is None:
+                    continue
+                if _is_hn_candidate_post(child.get("text") or ""):
+                    continue
+                jobs.append(
+                    RawJob(
+                        discovery_source=self.name,
+                        source_tier="aggregator",
+                        board_type="hackernews",
+                        external_id=str(child.get("id")),
+                        fetched_at=datetime.now(timezone.utc),
+                        payload={
+                            "job": child,
+                            "thread_id": thread_id,
+                            "thread_title": thread.get("title", ""),
+                        },
+                    )
+                )
+        return jobs
+
+
+def _is_hn_candidate_post(text: str) -> bool:
+    """A job seeker advertising themselves, not an employer hiring.
+
+    These use a recognisable self-description template. They leak into the
+    children when a thread mixes formats, and they are never applicable jobs.
+    """
+    lowered = html.unescape(text).lower()
+    seeker_markers = (
+        "willing to relocate",
+        "seeking work",
+        "seeking freelance",
+        "seeking part-time",
+        "seeking full-time",
+        "resume:",
+        "résumé:",
+        "cv:",
+        "technologies:",
+        "open to work",
+    )
+    hits = sum(1 for marker in seeker_markers if marker in lowered)
+    # The self-listing template opens with "Location:". That alone is decisive,
+    # because employer posts lead with the company or the role.
+    starts_with_location = lowered.lstrip("<p> ").startswith("location:")
+    if starts_with_location and hits >= 1:
+        return True
+    # Two or more seeker markers is a self-listing even if the poster also says
+    # "we're" somewhere while describing past work.
+    return hits >= 2 and "location:" in lowered
+
+
+def _rss_items(xml_text: str) -> list[dict[str, str]]:
+    """Minimal RSS item parser: enough for WWR's static feeds, no new dependency."""
+    items: list[dict[str, str]] = []
+    for raw_item in re.findall(r"<item>(.*?)</item>", xml_text, flags=re.DOTALL | re.IGNORECASE):
+        entry: dict[str, str] = {}
+        for tag in ("title", "link", "description", "pubDate", "region", "type", "category"):
+            match = re.search(
+                rf"<{tag}>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</{tag}>",
+                raw_item,
+                flags=re.DOTALL | re.IGNORECASE,
+            )
+            if match:
+                entry[tag] = html.unescape(match.group(1)).strip()
+        if entry.get("link"):
+            items.append(entry)
+    return items

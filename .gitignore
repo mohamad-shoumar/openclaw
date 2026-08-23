@@ -4,3 +4,8 @@ data/
 outputs/
 .venv/
 artifacts/
+base_resume.md
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+.lavish/

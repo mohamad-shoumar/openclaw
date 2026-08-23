@@ -3,11 +3,7 @@ Team Lead – Algorithmic Trader
 [shoumar.mohamad1@gmail.com](mailto:shoumar.mohamad1@gmail.com)  
 +96181811614  
 LinkedIn Beirut, Beirut Governorate, Lebanon  
-Profile  
-User-focused Team Lead with 3 years of experience in back end and algorithmic trading systems.  
-Currently leading a team of 5 engineers, driving sprint planning, code reviews, and enforcing a strict testing culture to ship  
-fast while maintaining quality.  
-Skilled in Python, FastAPI, AWS, system design, and trading systems.  
+  
 Experience  
 CoinQuant, Abu Dhabi  
 Sept 2025 to Present  
@@ -31,7 +27,7 @@ Full Stack Developer
 Jun 2023 to Jul 2024  
 
 Skills    
-  
+
 **Programming Languages**: Python, JavaScript, TypeScript  
 **Databases**: PostgreSQL, MySQL, MongoDB  
 **Frameworks**: React, FastApi  

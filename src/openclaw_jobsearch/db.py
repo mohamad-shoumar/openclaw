@@ -63,6 +63,8 @@ def initialize(connection: sqlite3.Connection) -> None:
     _ensure_column(connection, "jobs", "review_decision_by", "TEXT")
     _ensure_column(connection, "jobs", "review_notes", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(connection, "jobs", "approval_reason", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(connection, "jobs", "applied_at", "TEXT")
+    _ensure_column(connection, "jobs", "applied_notes", "TEXT NOT NULL DEFAULT ''")
     _ensure_column(connection, "jobs", "phase3_ready", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(connection, "jobs", "phase3_status", "TEXT NOT NULL DEFAULT 'not_started'")
     _ensure_column(connection, "jobs", "phase3_generated_at", "TEXT")
@@ -198,6 +200,24 @@ def update_review_status(
     return job
 
 
+def mark_applied(
+    connection: sqlite3.Connection,
+    job_slug: str,
+    *,
+    applied: bool = True,
+    notes: str = "",
+) -> JobRecord:
+    """Record that an application was actually submitted, separate from review approval."""
+    job = get_job(connection, job_slug)
+    if job is None:
+        raise KeyError(f"Unknown job slug: {job_slug}")
+    job.applied_at = datetime.now(timezone.utc) if applied else None
+    if notes or not applied:
+        job.applied_notes = notes
+    _persist_job(connection, job)
+    return job
+
+
 def update_phase3_artifacts(
     connection: sqlite3.Connection,
     job_slug: str,
@@ -280,6 +300,8 @@ def _copy_review_fields(target: JobRecord, source: JobRecord) -> None:
     target.review_decision_by = source.review_decision_by
     target.review_notes = source.review_notes
     target.approval_reason = source.approval_reason
+    target.applied_at = source.applied_at
+    target.applied_notes = source.applied_notes
     target.phase3_ready = source.phase3_ready
     target.phase3_status = source.phase3_status
     target.phase3_generated_at = source.phase3_generated_at
@@ -299,11 +321,12 @@ def _persist_job(connection: sqlite3.Connection, job: JobRecord) -> None:
             company, title, job_url, apply_url, posted_at, location_raw, workplace_type,
             remote_scope, lebanon_eligibility, seniority_title, salary_confidence,
             validation_status, review_status, review_decision_at, review_decision_by,
-            review_notes, approval_reason, phase3_ready, phase3_status, phase3_generated_at,
+            review_notes, approval_reason, applied_at, applied_notes,
+            phase3_ready, phase3_status, phase3_generated_at,
             artifact_dir, job_description_path, resume_path_generated,
             cover_letter_path_generated, artifact_meta_path, phase3_error,
             normalized_url_key, content_hash, payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(job_slug) DO UPDATE SET
             run_id = excluded.run_id,
             discovery_source = excluded.discovery_source,
@@ -327,6 +350,8 @@ def _persist_job(connection: sqlite3.Connection, job: JobRecord) -> None:
             review_decision_by = excluded.review_decision_by,
             review_notes = excluded.review_notes,
             approval_reason = excluded.approval_reason,
+            applied_at = excluded.applied_at,
+            applied_notes = excluded.applied_notes,
             phase3_ready = excluded.phase3_ready,
             phase3_status = excluded.phase3_status,
             phase3_generated_at = excluded.phase3_generated_at,
@@ -364,6 +389,8 @@ def _persist_job(connection: sqlite3.Connection, job: JobRecord) -> None:
             job.review_decision_by,
             job.review_notes,
             job.approval_reason,
+            job.applied_at.isoformat() if job.applied_at else None,
+            job.applied_notes,
             int(job.phase3_ready),
             job.phase3_status,
             job.phase3_generated_at.isoformat() if job.phase3_generated_at else None,

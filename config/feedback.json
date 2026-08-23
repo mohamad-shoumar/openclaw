@@ -1,0 +1,229 @@
+{
+  "_comment": "Reviewer feedback. Each rule blocks a whole class of jobs, not one posting.",
+  "rules": [
+    {
+      "id": "apply_domain-001",
+      "kind": "apply_domain",
+      "value": "liveblog365.com",
+      "reason": "job reposter site on free blog hosting, not an employer",
+      "created_at": "2026-08-12",
+      "origin_job": ""
+    },
+    {
+      "id": "apply_domain-002",
+      "kind": "apply_domain",
+      "value": "up.railway.app",
+      "reason": "hobby-hosted job reposter, not an employer",
+      "created_at": "2026-08-12",
+      "origin_job": ""
+    },
+    {
+      "id": "title_pattern-001",
+      "kind": "title_pattern",
+      "value": "technical mentor",
+      "reason": "mentoring gig, not a backend engineering role",
+      "created_at": "2026-08-12",
+      "origin_job": ""
+    },
+    {
+      "id": "title_pattern-002",
+      "kind": "title_pattern",
+      "value": "data analyst",
+      "reason": "analyst track, outside backend target",
+      "created_at": "2026-08-12",
+      "origin_job": ""
+    },
+    {
+      "id": "company-001",
+      "kind": "company",
+      "value": "data science dojo",
+      "reason": "posts analyst and content roles, not backend engineering",
+      "created_at": "2026-08-12",
+      "origin_job": ""
+    },
+    {
+      "id": "company-002",
+      "kind": "company",
+      "value": "marsbased",
+      "reason": "requires EU work authorization, ineligible from Lebanon",
+      "created_at": "2026-08-12",
+      "origin_job": ""
+    },
+    {
+      "id": "job-001",
+      "kind": "job",
+      "value": "revolut-build-analyse-innovate-data",
+      "reason": "team landing page scraped as a job, not a posting",
+      "created_at": "2026-08-12",
+      "origin_job": "revolut-build-analyse-innovate-data"
+    },
+    {
+      "id": "company-003",
+      "kind": "company",
+      "value": "canonical",
+      "reason": "work culture is a bad fit",
+      "created_at": "2026-08-12",
+      "origin_job": ""
+    },
+    {
+      "id": "apply_domain-003",
+      "kind": "apply_domain",
+      "value": "learn4good.com",
+      "reason": "learn4good is a job aggregator/reposter, not the real employer",
+      "created_at": "2026-08-12",
+      "origin_job": "bright-vision-technologies-remote-algorithmic-trading-developer-low-latency-eyjqb2jfdgl0bguioijszw1vdgugqwxnb3jpdghtawmg"
+    },
+    {
+      "id": "job-002",
+      "kind": "job",
+      "value": "origamics-founding-backend-engineer-49269646",
+      "reason": "On-site requirement conflicts with remote preference, specific to this posting",
+      "created_at": "2026-08-12",
+      "origin_job": "origamics-founding-backend-engineer-49269646"
+    },
+    {
+      "id": "job-003",
+      "kind": "job",
+      "value": "location-dallas-tx-remote-yes-willing-to-relocate-yes-including-internationally-technologies-python-langgraph-l-location",
+      "reason": "Location requirement (Dallas) is specific to this posting",
+      "created_at": "2026-08-16",
+      "origin_job": "location-dallas-tx-remote-yes-willing-to-relocate-yes-including-internationally-technologies-python-langgraph-l-location"
+    },
+    {
+      "id": "title_pattern-003",
+      "kind": "title_pattern",
+      "value": "intern",
+      "reason": "Reject all internship roles",
+      "created_at": "2026-08-16",
+      "origin_job": "vmysmartpros-python-intern-for-algorithmic-trading-systems-eyjqb2jfdgl0bguioijqexrob24gsw50zxjuigzvcibbbgdvcml0ag1pyybuc"
+    },
+    {
+      "id": "job-004",
+      "kind": "job",
+      "value": "vmysmartpros-algorithmic-trading-engineer-real-time-market-data-automation-trading-signals-eyjqb2jfdgl0bguioijbbgdvcml0a",
+      "reason": "Geo-restricted to Continental US and requires 6 years experience vs candidate's 3 \u2014 both reasons are specific to this posting's requirements",
+      "created_at": "2026-08-16",
+      "origin_job": "vmysmartpros-algorithmic-trading-engineer-real-time-market-data-automation-trading-signals-eyjqb2jfdgl0bguioijbbgdvcml0a"
+    },
+    {
+      "id": "apply_domain-004",
+      "kind": "apply_domain",
+      "value": "upwork.com",
+      "reason": "Reject all Upwork jobs",
+      "created_at": "2026-08-16",
+      "origin_job": "upwork-individual-python-engineer-for-ibkr-trading-system-no-agencies-eyjqb2jfdgl0bguioijjbmrpdmlkdwfsifb5dghvbibfbmdpbm"
+    },
+    {
+      "id": "job-005",
+      "kind": "job",
+      "value": "nearform-crafting-real-change-c-r-a-f-t-i-n-g-r-e-a-l-c-h-a-n-g-e-c-r-a-f-t-i-n-g-r-e-a-l-c-h-a-n-g-e-careers",
+      "reason": "Remote US only, candidate cannot work from Lebanon",
+      "created_at": "2026-08-17",
+      "origin_job": "nearform-crafting-real-change-c-r-a-f-t-i-n-g-r-e-a-l-c-h-a-n-g-e-c-r-a-f-t-i-n-g-r-e-a-l-c-h-a-n-g-e-careers"
+    },
+    {
+      "id": "title_pattern-004",
+      "kind": "title_pattern",
+      "value": "technical exam review",
+      "reason": "Role requires paying a one-time exam fee, reject future paid technical review postings",
+      "created_at": "2026-08-17",
+      "origin_job": "terac-python-backend-engineers-fastapi-technical-exam-review-eyjqb2jfdgl0bguioijqexrob24gqmfja2vuzcbfbmdpbmvlcnmgkezhc3r"
+    },
+    {
+      "id": "title_pattern-005",
+      "kind": "title_pattern",
+      "value": "usa-based",
+      "reason": "Role advertised as remote but restricted to USA-based candidates",
+      "created_at": "2026-08-17",
+      "origin_job": "tech-junction-ltd-remote-python-backend-developer-scalable-api-specialist-eyjqb2jfdgl0bguioijszw1vdguguhl0ag9uiejhy2tlbm"
+    },
+    {
+      "id": "work_authorization-001",
+      "kind": "work_authorization",
+      "value": "u.s, usa, united states, america, us work authorization, us-based, united states only",
+      "reason": "Role requires being located/authorized in the United States; no visa sponsorship implied",
+      "created_at": "2026-08-17",
+      "origin_job": "ascii-group-llc-python-fastapi-engineer-for-machine-learning-and-risk-modeling-eyjqb2jfdgl0bguioijqexrob24grmfzdefqssbfb"
+    },
+    {
+      "id": "title_pattern-006",
+      "kind": "title_pattern",
+      "value": "technical review",
+      "reason": "One-time paid study / exam review gig, not a real job; also very low pay.",
+      "created_at": "2026-08-17",
+      "origin_job": "terac-python-developers-technical-review-for-a-fastapi-exam-eyjqb2jfdgl0bguioijqexrob24grgv2zwxvcgvyczogvgvjag5py2fsifjl"
+    },
+    {
+      "id": "work_authorization-002",
+      "kind": "work_authorization",
+      "value": "europe, european union, eu-based, remote in europe, based in europe",
+      "reason": "Role requires being located/authorized to work in Europe",
+      "created_at": "2026-08-17",
+      "origin_job": "maptiler-location-services-engineer-maps-platform-remote-in-europe-weworkremotely-com-remote-jobs-maptiler-location-serv"
+    },
+    {
+      "id": "job-006",
+      "kind": "job",
+      "value": "crossing-hurdles-backend-engineer-python-fastapi-remote-eyjqb2jfdgl0bguioijcywnrzw5kievuz2luzwvyichqexrob24glybgyxn0qvbj",
+      "reason": "Stated salary ($230K\u2013$280K) is unrealistically high; blocking only this posting as salary ranges vary per listing.",
+      "created_at": "2026-08-18",
+      "origin_job": "crossing-hurdles-backend-engineer-python-fastapi-remote-eyjqb2jfdgl0bguioijcywnrzw5kievuz2luzwvyichqexrob24glybgyxn0qvbj"
+    },
+    {
+      "id": "company-004",
+      "kind": "company",
+      "value": "twilio",
+      "reason": "Recruiter wants to reject all jobs from Twilio",
+      "created_at": "2026-08-18",
+      "origin_job": "twilio-machine-learning-engineer-weworkremotely-com-remote-jobs-twilio-machine-learning-engineer"
+    },
+    {
+      "id": "company-005",
+      "kind": "company",
+      "value": "stripe",
+      "reason": "User wants to reject all jobs from Stripe",
+      "created_at": "2026-08-18",
+      "origin_job": "stripe-security-analyst-bug-bounty-weworkremotely-com-remote-jobs-stripe-security-analyst-bug-bounty"
+    },
+    {
+      "id": "work_authorization-003",
+      "kind": "work_authorization",
+      "value": "u.s, usa, united states, us work authorization, e-verify, authorized to work in the us, us employment eligibility",
+      "reason": "Posting requires US work authorization (E-Verify mentioned)",
+      "created_at": "2026-08-18",
+      "origin_job": "hightouch-ai-strategy-consultant-weworkremotely-com-remote-jobs-hightouch-ai-strategy-consultant"
+    },
+    {
+      "id": "work_authorization-004",
+      "kind": "work_authorization",
+      "value": "u.s, usa, united states, america, us work authorization, us-based",
+      "reason": "Role is restricted to candidates in the USA; not eligible to work there",
+      "created_at": "2026-08-18",
+      "origin_job": "vmysmartpros-remote-remote-backend-engineer-python-fastapi-eyjqb2jfdgl0bguioijbumvtb3rlxsbszw1vdgugqmfja2vuzcbfbmdpbmvlc"
+    },
+    {
+      "id": "job-007",
+      "kind": "job",
+      "value": "akraya-inc-python-backend-developer-26-02359-eyjqb2jfdgl0bguioijbuhl0ag9uiejhy2tlbmqgrgv2zwxvcgvyxsa6ifsyni0wmjm1ov0ilcj",
+      "reason": "Broken apply link",
+      "created_at": "2026-08-18",
+      "origin_job": "akraya-inc-python-backend-developer-26-02359-eyjqb2jfdgl0bguioijbuhl0ag9uiejhy2tlbmqgrgv2zwxvcgvyxsa6ifsyni0wmjm1ov0ilcj"
+    },
+    {
+      "id": "work_authorization-005",
+      "kind": "work_authorization",
+      "value": "u.s, usa, united states, america, us work authorization, us-based, authorized to work in the us",
+      "reason": "Posting requires US work authorization; not eligible",
+      "created_at": "2026-08-19",
+      "origin_job": "auraone-human-data-software-engineer-python-javascript-typescript-go-eyjqb2jfdgl0bguioijtb2z0d2fyzsbfbmdpbmvlciaouhl0ag9"
+    },
+    {
+      "id": "work_authorization-006",
+      "kind": "work_authorization",
+      "value": "u.s, usa, united states, us work authorization, us citizenship, authorized to work in the united states",
+      "reason": "Posting requires US work authorization; no visa sponsorship available.",
+      "created_at": "2026-08-19",
+      "origin_job": "netcyberops-jr-backend-python-developer-eyjqb2jfdgl0bguioijkcibcywnrzw5kifb5dghvbibezxzlbg9wzxiilcjjb21wyw55x25hbwuioijo"
+    }
+  ]
+}

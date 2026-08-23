@@ -86,5 +86,36 @@
   "remote_api": {
     "provider": "remotive",
     "limit": 100
+  },
+  "himalayas": {
+    "enabled": true,
+    "limit": 100,
+    "queries": [
+      "python backend",
+      "python engineer",
+      "backend engineer",
+      "fastapi",
+      "django",
+      "trading systems"
+    ]
+  },
+  "remoteok": {
+    "enabled": true,
+    "limit": 250,
+    "queries": [
+      "python",
+      "backend",
+      "fastapi",
+      "django",
+      "api"
+    ]
+  },
+  "weworkremotely": {
+    "enabled": true,
+    "limit": 200
+  },
+  "hackernews": {
+    "enabled": true,
+    "limit": 400
   }
 }

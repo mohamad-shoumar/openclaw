@@ -9,6 +9,7 @@ from .artifact_generation import (
     regenerate_all_resumes_from_markdown,
     regenerate_artifacts_from_markdown,
 )
+from . import paths
 from .config import AppConfig
 from .db import connect, get_job, list_review_jobs, update_review_status
 from .pipeline import export_review_outputs, run_pipeline
@@ -49,12 +50,12 @@ def add_common_path_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--data-dir",
-        default="data",
+        default=paths.DATA_DIR,
         help="Data directory relative to the workspace root.",
     )
     parser.add_argument(
         "--output-dir",
-        default="outputs",
+        default=paths.OUTPUT_DIR,
         help="Output directory relative to the workspace root.",
     )
 

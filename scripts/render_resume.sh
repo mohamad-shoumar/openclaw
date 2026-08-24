@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Render resume_master.md to PDF (and HTML) via the WeasyPrint template.
+# Render the master resume markdown to PDF (and HTML) via the WeasyPrint template.
 # DYLD_FALLBACK_LIBRARY_PATH is required so cffi can dlopen Homebrew's pango/cairo.
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
-SOURCE="${1:-resume_master.md}"
-OUTPUT="${2:-Mohamad_Shoumar_Resume.pdf}"
+SOURCE="${1:-candidate/resume_master.md}"
+OUTPUT="${2:-candidate/resume_master.pdf}"
 
 DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib PYTHONPATH=src .venv/bin/python - "$SOURCE" "$OUTPUT" <<'PY'
 import sys

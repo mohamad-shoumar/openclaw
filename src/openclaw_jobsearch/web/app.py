@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from .. import paths
 from ..artifact_generation import generate_phase3_artifacts
 from ..cli import load_dotenv
 from ..config import AppConfig
@@ -146,8 +147,8 @@ def job_detail(job: JobRecord) -> dict[str, Any]:
 def create_app(workspace_root: Path | None = None) -> FastAPI:
     root = Path(workspace_root or os.environ.get("OPENCLAW_WORKSPACE_ROOT", ".")).resolve()
     config_dir = root / "config"
-    data_dir = root / "data"
-    output_dir = root / "outputs"
+    data_dir = root / paths.DATA_DIR
+    output_dir = root / paths.OUTPUT_DIR
     db_path = data_dir / "jobs.db"
 
     load_dotenv(root / ".env")

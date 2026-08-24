@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .config import AppConfig
 from .models import JobRecord, RulesConfig
+from .paths import DATA_DIR
 from .pipeline import validate_job
 
 # Fields that `validate_job` derives; cleared before each replay so a re-scored
@@ -68,7 +69,7 @@ def _run_id_to_date(run_id: str) -> date:
 
 def load_stored_jobs(workspace_root: Path) -> list[tuple[JobRecord, date]]:
     """Rebuild every stored job from its persisted payload, paired with its run date."""
-    db_path = workspace_root / "data" / "jobs.db"
+    db_path = workspace_root / DATA_DIR / "jobs.db"
     if not db_path.exists():
         raise FileNotFoundError(f"No job database at {db_path}")
 

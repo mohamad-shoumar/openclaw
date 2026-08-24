@@ -1,11 +1,30 @@
+# secrets
 .env
-/data/jobs.db
-data/
-outputs/
+
+# generated, regenerable: everything the pipeline produces
+/var/
+
+# personal documents: resume sources, sent applications, interview notes.
+# Kept out of version control deliberately. Needs its own backup - see docs/operations.md.
+/candidate/
+
+# python
 .venv/
-artifacts/
-base_resume.md
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+
+# node
 frontend/node_modules/
 frontend/dist/
-__pycache__/
+
+# agent tooling
+.agents/
+.claude/
 .lavish/
+skills-lock.json
+
+# macOS
+.DS_Store

@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .models import JobRecord, Phase3Status, ReviewStatus, RunSummary
+from .paths import default_artifact_dir
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -432,7 +433,7 @@ def insert_run_summary(connection: sqlite3.Connection, summary: RunSummary) -> N
 
 
 def _default_artifact_dir(job_slug: str) -> str:
-    return f"artifacts/jobs/{job_slug}"
+    return default_artifact_dir(job_slug)
 
 
 def _review_sort_key(job: JobRecord) -> tuple[int, int, str]:

@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from .paths import default_artifact_dir
+
 
 SourceTier = Literal["ats", "aggregator", "remote_api"]
 BoardType = Literal[
@@ -29,13 +31,21 @@ class ProfileConfig(BaseModel):
     phone: str = ""
     linkedin_url: str = ""
     experience_years: int
-    resume_path: str
-    resume_text_path: str
     headline: str
     target_roles: list[str]
     required_skills: list[str]
     preferred_skills: list[str] = Field(default_factory=list)
     excluded_role_keywords: list[str] = Field(default_factory=list)
+
+
+class PathsConfig(BaseModel):
+    """Locations of human-authored inputs, relative to the workspace root."""
+
+    resume_pdf: str = "candidate/resume_master.pdf"
+    resume_text: str = "candidate/resume_plaintext.txt"
+    worldwide_registry: str = "reference/worldwide_companies.md"
+    resume_guide: str = "candidate/guides/tailor_resume.md"
+    cover_letter_guide: str = "candidate/guides/cover_letter.md"
 
 
 class RulesConfig(BaseModel):
@@ -215,7 +225,7 @@ class ApprovedJobContract(BaseModel):
 
     @classmethod
     def from_job(cls, job: JobRecord) -> "ApprovedJobContract":
-        artifact_dir = job.artifact_dir or f"artifacts/jobs/{job.job_slug}"
+        artifact_dir = job.artifact_dir or default_artifact_dir(job.job_slug)
         return cls(
             job_slug=job.job_slug,
             run_id=job.run_id,

@@ -12,6 +12,12 @@ from .config import AppConfig
 from .db import connect, get_job, list_jobs_ready_for_phase3, update_phase3_artifacts
 from .llm import LlmConfig, generate_json_completion, resolve_llm_config
 from .models import ApprovedJobContract
+from .paths import (
+    artifacts_jobs_root,
+    default_artifact_dir,
+    relative_to_workspace,
+    resolve_workspace_path,
+)
 from .pdf import (
     html_to_pdf,
     render_cover_letter_html,
@@ -68,8 +74,8 @@ def generate_phase3_artifacts(
     config.ensure_inputs_exist()
 
     resume_text = config.resume_text_path.read_text(encoding="utf-8")
-    resume_guide = _read_optional_text(workspace_root / "tailor_resume_guide.md")
-    cover_letter_guide = _read_optional_text(workspace_root / "cover_letter_guide.md")
+    resume_guide = _read_optional_text(config.resume_guide_path)
+    cover_letter_guide = _read_optional_text(config.cover_letter_guide_path)
     llm_config = resolve_llm_config(
         provider=llm_provider,
         model=llm_model,
@@ -151,8 +157,8 @@ def _generate_job_artifacts(
     cover_letter_guide: str,
     llm_config: LlmConfig,
 ) -> dict[str, str]:
-    artifact_dir_relative = contract.artifact_dir or f"artifacts/jobs/{contract.job_slug}"
-    artifact_dir = _resolve_workspace_path(workspace_root, artifact_dir_relative)
+    artifact_dir_relative = contract.artifact_dir or default_artifact_dir(contract.job_slug)
+    artifact_dir = resolve_workspace_path(workspace_root, artifact_dir_relative)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     matched_skills = _matched_skills(contract, config.profile.required_skills + config.profile.preferred_skills)
@@ -233,19 +239,19 @@ def _generate_job_artifacts(
         },
         "inputs": {
             "profile_path": "config/profile.json",
-            "resume_text_path": config.profile.resume_text_path,
-            "resume_guide_path": "tailor_resume_guide.md" if resume_guide else "",
-            "cover_letter_guide_path": "cover_letter_guide.md" if cover_letter_guide else "",
+            "resume_text_path": config.paths.resume_text,
+            "resume_guide_path": config.paths.resume_guide if resume_guide else "",
+            "cover_letter_guide_path": config.paths.cover_letter_guide if cover_letter_guide else "",
         },
         "outputs": {
-            "job_description_path": _relative_path(job_description_path, workspace_root),
-            "resume_md": _relative_path(resume_md_path, workspace_root),
-            "resume_html": _relative_path(resume_html_path, workspace_root),
-            "resume_pdf": _relative_path(resume_pdf_path, workspace_root) if resume_pdf_path.exists() else "",
-            "cover_letter_md": _relative_path(cover_letter_md_path, workspace_root),
-            "cover_letter_html": _relative_path(cover_letter_html_path, workspace_root),
-            "cover_letter_pdf": _relative_path(cover_letter_pdf_path, workspace_root) if cover_letter_pdf_path.exists() else "",
-            "artifact_meta_path": _relative_path(artifact_meta_path, workspace_root),
+            "job_description_path": relative_to_workspace(job_description_path, workspace_root),
+            "resume_md": relative_to_workspace(resume_md_path, workspace_root),
+            "resume_html": relative_to_workspace(resume_html_path, workspace_root),
+            "resume_pdf": relative_to_workspace(resume_pdf_path, workspace_root) if resume_pdf_path.exists() else "",
+            "cover_letter_md": relative_to_workspace(cover_letter_md_path, workspace_root),
+            "cover_letter_html": relative_to_workspace(cover_letter_html_path, workspace_root),
+            "cover_letter_pdf": relative_to_workspace(cover_letter_pdf_path, workspace_root) if cover_letter_pdf_path.exists() else "",
+            "artifact_meta_path": relative_to_workspace(artifact_meta_path, workspace_root),
         },
         "pdf_error": pdf_error,
         "approved_job_contract": contract.model_dump(mode="json"),
@@ -253,11 +259,11 @@ def _generate_job_artifacts(
     artifact_meta_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     return {
-        "artifact_dir": _relative_path(artifact_dir, workspace_root),
-        "job_description_path": _relative_path(job_description_path, workspace_root),
-        "resume_path_generated": _relative_path(resume_md_path, workspace_root),
-        "cover_letter_path_generated": _relative_path(cover_letter_md_path, workspace_root),
-        "artifact_meta_path": _relative_path(artifact_meta_path, workspace_root),
+        "artifact_dir": relative_to_workspace(artifact_dir, workspace_root),
+        "job_description_path": relative_to_workspace(job_description_path, workspace_root),
+        "resume_path_generated": relative_to_workspace(resume_md_path, workspace_root),
+        "cover_letter_path_generated": relative_to_workspace(cover_letter_md_path, workspace_root),
+        "artifact_meta_path": relative_to_workspace(artifact_meta_path, workspace_root),
     }
 
 
@@ -271,8 +277,8 @@ def regenerate_artifacts_from_markdown(
     if job is None:
         raise KeyError(f"Unknown job slug: {job_slug}")
 
-    artifact_dir_relative = job.artifact_dir or f"artifacts/jobs/{job_slug}"
-    artifact_dir = _resolve_workspace_path(workspace_root, artifact_dir_relative)
+    artifact_dir_relative = job.artifact_dir or default_artifact_dir(job_slug)
+    artifact_dir = resolve_workspace_path(workspace_root, artifact_dir_relative)
 
     regenerated: list[str] = []
     renderers = {
@@ -303,7 +309,7 @@ def regenerate_artifacts_from_markdown(
 
 
 def regenerate_all_resumes_from_markdown(workspace_root: Path) -> dict[str, list[str]]:
-    jobs_root = workspace_root / "artifacts" / "jobs"
+    jobs_root = artifacts_jobs_root(workspace_root)
     if not jobs_root.exists():
         raise FileNotFoundError(f"Artifacts jobs directory not found: {jobs_root}")
 
@@ -722,20 +728,6 @@ def _should_skip_resume_line(line: str) -> bool:
 
 def _clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value.replace("&nbsp;", " ")).strip()
-
-
-def _resolve_workspace_path(workspace_root: Path, raw_path: str) -> Path:
-    path = Path(raw_path)
-    if path.is_absolute():
-        return path
-    return workspace_root / path
-
-
-def _relative_path(path: Path, workspace_root: Path) -> str:
-    try:
-        return str(path.relative_to(workspace_root))
-    except ValueError:
-        return str(path)
 
 
 def _build_resume_pdf_filename(candidate_name: str, tailored_headline: str, fallback_title: str) -> str:

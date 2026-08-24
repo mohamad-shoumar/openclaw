@@ -1,0 +1,8 @@
+{
+  "_comment": "Where human-authored inputs live. Generated output paths are conventions owned by src/openclaw_jobsearch/paths.py, not configured here.",
+  "resume_pdf": "candidate/resume_master.pdf",
+  "resume_text": "candidate/resume_plaintext.txt",
+  "worldwide_registry": "reference/worldwide_companies.md",
+  "resume_guide": "candidate/guides/tailor_resume.md",
+  "cover_letter_guide": "candidate/guides/cover_letter.md"
+}

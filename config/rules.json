@@ -59,10 +59,22 @@
     "apac only",
     "must be based in",
     "must reside in",
+    "must be located in",
     "authorized to work in",
+    "eligible to work in",
     "visa sponsorship unavailable",
     "cannot hire in",
-    "not hiring in"
+    "not hiring in",
+    "us-based",
+    "us based",
+    "usa based",
+    "based in the us",
+    "(us)",
+    "(usa)",
+    "us citizens only",
+    "us citizen",
+    "green card",
+    "w2"
   ],
   "hybrid_patterns": [
     "hybrid",

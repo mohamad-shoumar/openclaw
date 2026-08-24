@@ -12,7 +12,7 @@ A human approves everything.
 
 ```
 sources  ->  normalize  ->  dedupe  ->  validate  ->  review queue  ->  artifacts
-(9 board     one JobRecord            strict rules   human approves    tailored resume
+(16 board    one JobRecord            strict rules   human approves    tailored resume
  adapters)   schema                   + feedback     in CLI or UI      + cover letter
                                       rules
 ```

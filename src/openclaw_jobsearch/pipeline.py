@@ -116,6 +116,14 @@ def normalize_job(raw_job: RawJob, run_id: str, rules) -> JobRecord:
         return _normalize_weworkremotely(raw_job, run_id)
     if board_type == "hackernews":
         return _normalize_hackernews(raw_job, run_id)
+    if board_type == "hiringcafe":
+        return _normalize_hiringcafe(raw_job, run_id)
+    if board_type == "nodesk":
+        return _normalize_nodesk(raw_job, run_id)
+    if board_type == "remote100k":
+        return _normalize_remote100k(raw_job, run_id)
+    if board_type == "arc":
+        return _normalize_arc(raw_job, run_id)
     raise ValueError(f"Unsupported board type: {board_type}")
 
 
@@ -127,7 +135,9 @@ def validate_job(job: JobRecord, config: AppConfig, as_of: date | None = None) -
     location_text = job.location_raw.lower()
     searchable_text = " ".join(part for part in [title_text, location_text, description_text] if part)
 
-    remote_scope, remote_evidence = _classify_remote_scope(location_text, description_text, job.workplace_type, rules)
+    remote_scope, remote_evidence = _classify_remote_scope(
+        location_text, description_text, job.workplace_type, rules, title_text
+    )
     job.remote_scope = remote_scope
     if remote_evidence:
         job.evidence_snippets.append(EvidenceSnippet(field="remote_scope", snippet=remote_evidence))
@@ -458,6 +468,222 @@ def _normalize_weworkremotely(raw_job: RawJob, run_id: str) -> JobRecord:
     )
 
 
+def _eligibility_location(worldwide_ok: bool, countries: list[str]) -> str:
+    """Render a machine-known eligibility list into text the rule engine can read.
+
+    HiringCafe and Arc both hand us the eligible-country list as structured data,
+    which every prose-based board makes us infer. Phrasing it as "must be based
+    in ..." keeps a single code path: the same restriction patterns that catch
+    the phrase in a job description catch it here.
+    """
+    if worldwide_ok:
+        return "Remote - Worldwide"
+    listed = [str(code).strip() for code in countries if str(code).strip()]
+    if not listed:
+        # No stated restriction is absence of evidence, not worldwide eligibility;
+        # "open" is the scope that says so.
+        return "Remote"
+    return f"Remote - must be based in {', '.join(listed)}"
+
+
+def _normalize_hiringcafe(raw_job: RawJob, run_id: str) -> JobRecord:
+    item = raw_job.payload["job"]
+    processed = item.get("v5_processed_job_data") or {}
+    company_data = item.get("enriched_company_data") or {}
+    info = item.get("job_information") or {}
+
+    worldwide_ok = bool(processed.get("is_workplace_worldwide_ok"))
+    countries = processed.get("boundless_workplace_countries") or processed.get("workplace_countries") or []
+    location = _eligibility_location(worldwide_ok, list(countries))
+
+    # Search hits carry no full posting body, only HiringCafe's own extraction of
+    # it. Compose the fields that actually decide a match so skill and
+    # eligibility checks have real text to read rather than an empty string.
+    parts = [
+        processed.get("requirements_summary") or "",
+        "Tools: " + ", ".join(str(t) for t in (processed.get("technical_tools") or [])),
+        "Responsibilities: " + ", ".join(str(a) for a in (processed.get("role_activities") or [])),
+        f"Seniority: {processed.get('seniority_level') or 'unknown'}.",
+        f"Workplace: {processed.get('formatted_workplace_location') or location}.",
+        location + ".",
+        company_data.get("tagline") or processed.get("company_tagline") or "",
+    ]
+    description = _clean_text(" ".join(part for part in parts if part.strip(" ,:")))
+
+    salary_min = processed.get("yearly_min_compensation")
+    salary_max = processed.get("yearly_max_compensation")
+    apply_url = item.get("apply_url") or ""
+    workplace_type = str(processed.get("workplace_type") or "remote").lower()
+    return _base_job_record(
+        raw_job=raw_job,
+        run_id=run_id,
+        company=processed.get("company_name") or company_data.get("name") or "",
+        title=info.get("title") or processed.get("core_job_title") or info.get("job_title_raw", ""),
+        job_url=apply_url,
+        apply_url=apply_url,
+        posted_at=_parse_date(
+            processed.get("estimated_publish_date") or processed.get("estimated_publish_date_millis")
+        ),
+        location_raw=location,
+        workplace_type=workplace_type,
+        description_text=description,
+        salary_min=float(salary_min) if isinstance(salary_min, (int, float)) and salary_min else None,
+        salary_max=float(salary_max) if isinstance(salary_max, (int, float)) and salary_max else None,
+        salary_currency=processed.get("listed_compensation_currency") or None,
+        salary_confidence=(
+            "confirmed"
+            if processed.get("is_compensation_transparent") and (salary_min or salary_max)
+            else "estimated" if (salary_min or salary_max) else "not found"
+        ),
+        summary=_clean_text(processed.get("requirements_summary") or "") or description[:220],
+    )
+
+
+def _normalize_nodesk(raw_job: RawJob, run_id: str) -> JobRecord:
+    item = raw_job.payload["job"]
+    description = _clean_text(item.get("description", ""))
+    # NoDesk titles read "Role at Company"; split on the last " at " because role
+    # names contain the word themselves ("Engineer at ..." vs "Look at Media").
+    # The feed double-escapes entities, so one unescape in the RSS reader leaves
+    # "&amp;" behind in titles like "Audio &amp; Display Specialist".
+    raw_title = html.unescape(item.get("title", ""))
+    role, separator, company = raw_title.rpartition(" at ")
+    if not separator:
+        role, company = raw_title, ""
+    match = re.search(
+        r"(anywhere in the world|worldwide|remote, [A-Z][A-Za-z ]+|[A-Z][A-Za-z ]+ only)", description
+    )
+    link = item.get("link", "")
+    return _base_job_record(
+        raw_job=raw_job,
+        run_id=run_id,
+        company=company.strip(),
+        title=role.strip(),
+        job_url=link,
+        apply_url=link,
+        posted_at=_parse_date(item.get("pubDate")),
+        location_raw=match.group(1) if match else "Remote",
+        workplace_type="remote",
+        description_text=description,
+        summary=description[:220],
+    )
+
+
+def _normalize_remote100k(raw_job: RawJob, run_id: str) -> JobRecord:
+    posting = raw_job.payload["job"]
+    description = _clean_text(posting.get("description", ""))
+    organization = posting.get("hiringOrganization")
+    company = organization.get("name", "") if isinstance(organization, dict) else str(organization or "")
+
+    requirements = posting.get("applicantLocationRequirements")
+    entries = requirements if isinstance(requirements, list) else [requirements]
+    countries = [
+        entry.get("name", "") if isinstance(entry, dict) else str(entry or "")
+        for entry in entries
+        if entry
+    ]
+    telecommute = str(posting.get("jobLocationType", "")).upper() == "TELECOMMUTE"
+    location = _eligibility_location(False, countries) if countries else ("Remote" if telecommute else "")
+
+    salary_min = salary_max = None
+    currency = None
+    base_salary = posting.get("baseSalary")
+    if isinstance(base_salary, dict):
+        currency = base_salary.get("currency")
+        value = base_salary.get("value")
+        if isinstance(value, dict):
+            salary_min = value.get("minValue")
+            salary_max = value.get("maxValue")
+
+    url = posting.get("url") or raw_job.payload.get("url", "")
+    return _base_job_record(
+        raw_job=raw_job,
+        run_id=run_id,
+        company=company,
+        title=posting.get("title", ""),
+        job_url=url,
+        apply_url=url,
+        posted_at=_parse_date(posting.get("datePosted")),
+        location_raw=location,
+        workplace_type="remote" if telecommute else "unknown",
+        description_text=description,
+        salary_min=float(salary_min) if isinstance(salary_min, (int, float)) and salary_min else None,
+        salary_max=float(salary_max) if isinstance(salary_max, (int, float)) and salary_max else None,
+        salary_currency=currency or None,
+        # The board's whole premise is a $100k floor, and the posting states the
+        # band outright, so treat it as the employer's own figure.
+        salary_confidence="confirmed" if salary_min or salary_max else "not found",
+        summary=description[:220],
+    )
+
+
+def _normalize_arc(raw_job: RawJob, run_id: str) -> JobRecord:
+    item = raw_job.payload["job"]
+    company_data = item.get("company") if isinstance(item.get("company"), dict) else {}
+    company = company_data.get("name") or ""
+
+    countries = [str(c).strip() for c in (item.get("requiredCountries") or []) if str(c).strip()]
+    location = _eligibility_location(not countries, countries)
+
+    categories = [
+        c.get("name", "") for c in (item.get("categories") or []) if isinstance(c, dict) and c.get("name")
+    ]
+    levels = item.get("experienceLevels") or ([item["experienceLevel"]] if item.get("experienceLevel") else [])
+    # Arc's list payload has no posting body and gates the full posting behind an
+    # account, so the record carries its structured metadata as the description.
+    description = _clean_text(
+        " ".join(
+            part
+            for part in [
+                f"{item.get('title', '')} - {item.get('jobType') or ''} {item.get('jobRole') or item.get('positionType') or ''} role at {company or 'an undisclosed company'}.",
+                "Skills: " + ", ".join(categories) + "." if categories else "",
+                "Experience level: " + ", ".join(str(level) for level in levels) + "." if levels else "",
+                location + ".",
+                "Arc requires an account to view the full posting and apply.",
+            ]
+            if part.strip()
+        )
+    )
+
+    salary_min = item.get("minAnnualSalary")
+    salary_max = item.get("maxAnnualSalary")
+    hourly_min, hourly_max = item.get("minHourlyRate"), item.get("maxHourlyRate")
+    if not (salary_min or salary_max) and (hourly_min or hourly_max):
+        # Marketplace contracts quote an hourly rate; annualise at 2,080 hours so
+        # the band is comparable to every other source in the archive.
+        salary_min = hourly_min * 2080 if isinstance(hourly_min, (int, float)) else None
+        salary_max = hourly_max * 2080 if isinstance(hourly_max, (int, float)) else None
+        confidence = "estimated"
+    else:
+        confidence = "confirmed" if salary_min or salary_max else "not found"
+
+    # Deduplication keys on the normalized URL, which keeps only scheme, host and
+    # path - so every job on a listing page sharing that page's URL would collapse
+    # to a single record. Address each posting by Arc's own slug instead: the path
+    # is unique per job and resolves for a signed-in user, falling back to the
+    # listing page for anyone who is not.
+    listing_url = raw_job.payload.get("listing_url", "https://arc.dev/remote-jobs")
+    slug = item.get("urlString") or ""
+    job_url = f"https://arc.dev/remote-jobs/{slug}" if slug else listing_url
+    return _base_job_record(
+        raw_job=raw_job,
+        run_id=run_id,
+        company=company,
+        title=item.get("title", ""),
+        job_url=job_url,
+        apply_url=job_url,
+        posted_at=_parse_date(item.get("postedAt")),
+        location_raw=location,
+        workplace_type="remote",
+        description_text=description,
+        salary_min=float(salary_min) if isinstance(salary_min, (int, float)) and salary_min else None,
+        salary_max=float(salary_max) if isinstance(salary_max, (int, float)) and salary_max else None,
+        salary_currency="USD" if salary_min or salary_max else None,
+        salary_confidence=confidence,
+        summary=description[:220],
+    )
+
+
 # Words that mark a pipe-delimited segment as a job title rather than a company.
 HN_ROLE_WORDS = (
     "engineer", "developer", "scientist", "designer", "architect", "analyst",
@@ -533,6 +759,12 @@ def _pick_hn_apply_url(raw_text: str, item_id: Any) -> str:
             value = 100
         elif any(hint in path for hint in HN_CAREER_PATH_HINTS):
             value = 80
+        elif not path.strip("/"):
+            # A bare domain root is a marketing homepage; nobody applies there.
+            # Zeroing it lets the email and HN-permalink fallbacks win, and both
+            # carry the poster's own instructions. Cogram, IVPN and Pingintel all
+            # linked only their homepage and it was stored as the apply URL.
+            return 0
         # "Apply here: <url>" and friends: proximity to an apply verb is a
         # stronger signal than anything in the URL itself.
         position = plain.find(url)
@@ -616,9 +848,14 @@ def _parse_hn_headline(text: str, author: str, fallback_url: str = "") -> tuple[
     ]
     segments = [s for s in segments if s]
 
+    # A job title is a short phrase. Prose that happens to contain a role word is
+    # not one: "AI platform for the architecture, engineering, and construction
+    # industry" matched "engineering" and became the title of a Cogram posting.
+    HN_MAX_TITLE_CHARS = 90
+
     def is_role(segment: str) -> bool:
         lowered = segment.lower()
-        return any(word in lowered for word in HN_ROLE_WORDS)
+        return len(segment) <= HN_MAX_TITLE_CHARS and any(word in lowered for word in HN_ROLE_WORDS)
 
     def is_meta(segment: str) -> bool:
         lowered = segment.lower()
@@ -633,12 +870,34 @@ def _parse_hn_headline(text: str, author: str, fallback_url: str = "") -> tuple[
     # segments[0] would print the job title as the employer, so derive the name
     # from the linked domain instead and only then give up to the HN handle.
     company = companies[0] if companies else (_company_from_url(fallback_url) or f"HN: {author}")
-    title = roles[0] if roles else next((s for s in segments if s != company), first_line[:120])
+
+    def pick_title() -> str:
+        if roles:
+            return roles[0]
+        # No segment names a role. Skip the logistics segments rather than taking
+        # the first leftover: that is how "Miami or Remote" and "Remote (US)
+        # First with offices in NYC and SF" ended up as job titles.
+        for segment in segments:
+            if segment != company and not is_meta(segment) and len(segment) <= HN_MAX_TITLE_CHARS:
+                return segment
+        # Headlines that name no role at all do exist. Look for one in the body
+        # before resorting to printing the company's opening sentence.
+        for sentence in re.split(r"(?<=[.!?])\s+|\n", text[:800]):
+            candidate = sentence.strip(" -:*")
+            if candidate and is_role(candidate):
+                return candidate
+        return first_line[:120]
+
+    title = pick_title()
     location = next(
         (s for s in metas if re.search(r"remote|onsite|on-site|hybrid|worldwide|anywhere", s, re.I)),
         "Remote" if re.search(r"\bremote\b", text, re.I) else "",
     )
-    return company[:120].strip(), title[:160].strip(), location[:120].strip()
+    # A headline that omits the separator after the location runs it straight into
+    # the company blurb, e.g. "Remote (US) First with offices in NYC and SF We're
+    # building a healthier future...". Keep the locative phrase, drop the prose.
+    location = re.split(r"(?<=[.!?])\s|\s+(?:we|our|the company)\b", location, maxsplit=1, flags=re.I)[0]
+    return company[:120].strip(), title[:160].strip(), location[:80].strip()
 
 
 def _normalize_hackernews(raw_job: RawJob, run_id: str) -> JobRecord:
@@ -749,7 +1008,9 @@ def _rank_key(job: JobRecord, config: AppConfig) -> tuple[int, int, int]:
     return (source_weight, preferred_matches, freshness)
 
 
-def _classify_remote_scope(location_text: str, description_text: str, workplace_type: str, rules) -> tuple[str, str]:
+def _classify_remote_scope(
+    location_text: str, description_text: str, workplace_type: str, rules, title_text: str = ""
+) -> tuple[str, str]:
     remote_text = " ".join(part for part in [location_text, workplace_type.lower(), description_text] if part)
     explicit_policy_phrases = [
         "fully remote",
@@ -762,6 +1023,16 @@ def _classify_remote_scope(location_text: str, description_text: str, workplace_
     has_location_remote_signal = any(token in location_text for token in ["remote", "worldwide", "global", "anywhere"])
     has_policy_remote_signal = workplace_type.lower() == "remote" or _matches_any(description_text, explicit_policy_phrases)
     has_remote_signal = has_location_remote_signal or has_policy_remote_signal
+
+    # A stated geographic limit outranks worldwide phrasing, so this runs before
+    # the global patterns below. Postings say "Fully Remote (US-Based Candidates)"
+    # and "Only W2 || REMOTE" constantly: the limit is the operative half, and
+    # checking the marketing phrase first classified those as globally open.
+    # The title is scanned too because posters put "US Only" and "W2" there.
+    restriction_scope_text = " ".join(part for part in [location_text, title_text.lower()] if part)
+    if _matches_any(restriction_scope_text, rules.remote_restriction_patterns):
+        return "restricted", _first_matching_phrase(restriction_scope_text, rules.remote_restriction_patterns)
+
     if _matches_any(location_text, rules.global_remote_patterns):
         return "global", _first_matching_phrase(location_text, rules.global_remote_patterns)
     if "worldwide" in location_text or "global" in location_text or "anywhere" in location_text:

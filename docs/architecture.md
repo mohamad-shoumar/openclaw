@@ -50,13 +50,27 @@ One run at a time.
 
 ## Source adapters
 
-Nine adapters across three tiers.
+Sixteen adapters across three tiers.
 
 | Tier | Adapters | Notes |
 |---|---|---|
 | `ats` | Greenhouse, Lever, Ashby, Workday | Public JSON APIs, highest trust, employer is unambiguous |
-| `aggregator` | SerpAPI Google Jobs, generic careers pages | Noisiest tier; the employer often has to be inferred from the URL |
-| `remote_api` | Remotive, Himalayas, RemoteOK, We Work Remotely, Hacker News "Who is hiring" | No auth needed |
+| `aggregator` | SerpAPI Google Jobs, generic careers pages, Hacker News "Who is hiring", HiringCafe, NoDesk, Remote100K, Arc | Noisiest tier; the employer often has to be inferred from the URL |
+| `remote_api` | Remotive, Himalayas, RemoteOK, We Work Remotely | No auth needed |
+
+HiringCafe and Arc are the only sources that state eligibility as structured data rather than prose.
+Both hand over an explicit eligible-country list per posting, which `_eligibility_location` renders as "Remote - must be based in ..." so the existing restriction patterns classify it without a second code path.
+Everywhere else that verdict has to be inferred from the description.
+
+Neither HiringCafe nor Arc publishes an API.
+Both render results server-side, so both are read from the `__NEXT_DATA__` payload of a normal page fetch.
+HiringCafe's `buildId` rotates on every deploy and is therefore resolved from the live page per run, never pinned.
+Arc applies its `?jobRoles=` and `?page=` filters client-side only, so the skill path (`/remote-jobs/<skill>`) is the sole server-side filter and one request per configured skill is the ceiling of what Arc will return.
+Arc also gates full postings behind an account, so its records carry structured metadata as the description rather than posting text.
+
+Wellfound and Contra were evaluated and rejected.
+Wellfound puts `/graphql` and its sitemap behind Cloudflare and loads listings after hydration, leaving nothing in the server payload to read.
+Contra has no public jobs API and its sitemap indexes freelancer profiles, not openings.
 
 Adding a board means one adapter class in `sources.py`, one normalizer in `pipeline.py`, and one entry in `BoardType`.
 Every adapter swallows its own fetch failures so one dead board cannot end a run.

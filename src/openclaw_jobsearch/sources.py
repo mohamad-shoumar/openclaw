@@ -404,6 +404,10 @@ def build_sources(
         RemoteOkSource(watchlist.remoteok),
         WeWorkRemotelySource(watchlist.weworkremotely),
         HackerNewsHiringSource(watchlist.hackernews),
+        HiringCafeSource(watchlist.hiringcafe),
+        NoDeskSource(watchlist.nodesk),
+        Remote100KSource(watchlist.remote100k),
+        ArcSource(watchlist.arc),
     ]
 
 
@@ -1047,3 +1051,323 @@ def _rss_items(xml_text: str) -> list[dict[str, str]]:
         if entry.get("link"):
             items.append(entry)
     return items
+
+
+def _next_data(html_text: str) -> dict:
+    """Pull the Next.js SSR payload out of a page.
+
+    Both HiringCafe and Arc render their result set server-side and inline it
+    here, which is the only no-auth way to read either of them.
+    """
+    match = re.search(
+        r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html_text, flags=re.DOTALL
+    )
+    if not match:
+        return {}
+    try:
+        return json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _json_ld_job_postings(html_text: str) -> list[dict]:
+    """Every schema.org JobPosting embedded in a page, flattening @graph wrappers."""
+    postings: list[dict] = []
+    blocks = re.findall(
+        r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>',
+        html_text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    for block in blocks:
+        try:
+            data = json.loads(html.unescape(block.strip()))
+        except json.JSONDecodeError:
+            continue
+        # Copied because @graph nodes are appended while iterating to flatten
+        # them, and that must not mutate the parsed document.
+        candidates = list(data) if isinstance(data, list) else [data]
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            graph = candidate.get("@graph")
+            if isinstance(graph, list):
+                candidates.extend(node for node in graph if isinstance(node, dict))
+                continue
+            if candidate.get("@type") == "JobPosting":
+                postings.append(candidate)
+    return postings
+
+
+class HiringCafeSource(SourceAdapter):
+    """HiringCafe, read through its own server-rendered search payload.
+
+    The documented-looking `POST /api/search-jobs` route that community scrapers
+    use is gone (405); search moved to `getServerSideProps`. Next.js exposes the
+    same props as JSON at `/_next/data/<buildId>/index.json`, so one GET per page
+    returns the identical `ssrHits` the browser gets, no auth and no key.
+
+    `buildId` rotates on every HiringCafe deploy, so it has to be read from the
+    live page rather than pinned. If the data route rejects the buildId we fall
+    back to parsing the HTML search page, which carries the same payload inline.
+
+    Worth the effort because the hits are pre-enriched with
+    `boundless_workplace_countries` and `is_workplace_worldwide_ok` - the exact
+    eligibility signal every other board makes us infer from prose.
+    """
+
+    name = "hiringcafe"
+
+    BASE = "https://hiringcafe.com"
+
+    def __init__(self, config):
+        self.config = config
+        self._build_id: str | None = None
+
+    def fetch(self) -> list[RawJob]:
+        if not self.config or not self.config.enabled:
+            return []
+        jobs: list[RawJob] = []
+        seen: set[str] = set()
+        for query in self.config.queries:
+            for page in range(max(1, self.config.pages_per_query)):
+                hits = self._fetch_page(query, page)
+                if not hits:
+                    break
+                for hit in hits:
+                    external_id = str(hit.get("id") or hit.get("objectID") or "")
+                    if not external_id or external_id in seen:
+                        continue
+                    seen.add(external_id)
+                    # HiringCafe keeps closed postings in the index and flags them.
+                    if hit.get("is_expired"):
+                        continue
+                    if len(jobs) >= self.config.limit:
+                        return jobs
+                    jobs.append(
+                        RawJob(
+                            discovery_source=self.name,
+                            source_tier="aggregator",
+                            board_type="hiringcafe",
+                            external_id=external_id,
+                            fetched_at=datetime.now(timezone.utc),
+                            payload={"job": hit, "query": query},
+                        )
+                    )
+        return jobs
+
+    def _search_state(self, query: str) -> str:
+        # defaultToUserLocation must be off: left on, the server injects the
+        # caller's country and silently narrows the result set to local jobs.
+        return json.dumps(
+            {
+                "searchQuery": query,
+                "workplaceTypes": ["Remote"],
+                "defaultToUserLocation": False,
+                "sortBy": "date",
+            },
+            separators=(",", ":"),
+        )
+
+    def _fetch_page(self, query: str, page: int) -> list[dict]:
+        params = urlencode({"searchState": self._search_state(query), "page": page})
+        build_id = self._resolve_build_id()
+        if build_id:
+            try:
+                payload = fetch_json(f"{self.BASE}/_next/data/{build_id}/index.json?{params}")
+                hits = (payload or {}).get("pageProps", {}).get("ssrHits")
+                if isinstance(hits, list):
+                    return hits
+            except Exception:
+                # Almost always a rotated buildId; re-read it on the next call.
+                self._build_id = None
+        try:
+            data = _next_data(fetch_html(f"{self.BASE}/?{params}"))
+        except Exception:
+            return []
+        hits = data.get("props", {}).get("pageProps", {}).get("ssrHits")
+        return hits if isinstance(hits, list) else []
+
+    def _resolve_build_id(self) -> str | None:
+        if self._build_id:
+            return self._build_id
+        try:
+            data = _next_data(fetch_html(f"{self.BASE}/"))
+        except Exception:
+            return None
+        build_id = data.get("buildId")
+        self._build_id = build_id if isinstance(build_id, str) else None
+        return self._build_id
+
+
+class NoDeskSource(SourceAdapter):
+    """NoDesk's curated remote-jobs RSS. Static XML, no auth.
+
+    Deliberately small - NoDesk hand-curates rather than aggregates, so the feed
+    carries roughly ten current listings with full descriptions inline.
+    """
+
+    name = "nodesk"
+
+    DEFAULT_FEEDS = ("https://nodesk.co/remote-jobs/index.xml",)
+
+    def __init__(self, config):
+        self.config = config
+
+    def fetch(self) -> list[RawJob]:
+        if not self.config or not self.config.enabled:
+            return []
+        feeds = self.config.feeds or list(self.DEFAULT_FEEDS)
+        jobs: list[RawJob] = []
+        seen: set[str] = set()
+        for feed_url in feeds:
+            try:
+                xml_text = fetch_html(feed_url)
+            except Exception:
+                continue
+            for item in _rss_items(xml_text)[: self.config.limit]:
+                link = item.get("link", "")
+                if not link or link in seen:
+                    continue
+                seen.add(link)
+                jobs.append(
+                    RawJob(
+                        discovery_source=self.name,
+                        source_tier="aggregator",
+                        board_type="nodesk",
+                        external_id=link,
+                        fetched_at=datetime.now(timezone.utc),
+                        payload={"job": item, "feed": feed_url},
+                    )
+                )
+        return jobs
+
+
+class Remote100KSource(SourceAdapter):
+    """Remote100K: sitemap enumeration plus per-page schema.org JobPosting.
+
+    No API and no feed, but every `/remote-job/<slug>` page carries a complete
+    JobPosting including `applicantLocationRequirements` and `baseSalary`, and
+    the board only lists roles above $100k so the salary floor is implicit.
+
+    The sitemap holds ~800 slugs, far more than is worth fetching. Slugs are
+    descriptive ("argano-oracle-cloud-hcm-..."), so filter on the slug first and
+    only fetch detail pages that already look relevant.
+    """
+
+    name = "remote100k"
+
+    BASE = "https://remote100k.com"
+    JOB_PATH = "/remote-job/"
+
+    def __init__(self, config):
+        self.config = config
+
+    def fetch(self) -> list[RawJob]:
+        if not self.config or not self.config.enabled:
+            return []
+        try:
+            sitemap = fetch_html(f"{self.BASE}/sitemap.xml")
+        except Exception:
+            return []
+        urls = [
+            url
+            for url in re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", sitemap)
+            if self.JOB_PATH in url
+        ]
+        terms = sorted({t.lower() for q in self.config.queries for t in q.split() if len(t) > 2})
+        if terms:
+            urls = [url for url in urls if any(term in url.lower() for term in terms)]
+        urls = urls[: self.config.limit]
+        if not urls:
+            return []
+
+        def load(url: str) -> tuple[str, dict | None]:
+            try:
+                postings = _json_ld_job_postings(fetch_html(url))
+            except Exception:
+                return url, None
+            return url, postings[0] if postings else None
+
+        jobs: list[RawJob] = []
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for url, posting in pool.map(load, urls):
+                if not posting:
+                    continue
+                jobs.append(
+                    RawJob(
+                        discovery_source=self.name,
+                        source_tier="aggregator",
+                        board_type="remote100k",
+                        external_id=url,
+                        fetched_at=datetime.now(timezone.utc),
+                        payload={"job": posting, "url": url},
+                    )
+                )
+        return jobs
+
+
+class ArcSource(SourceAdapter):
+    """Arc.dev remote jobs, from the SSR payload on each skill landing page.
+
+    Arc has no public API. Its `?jobRoles=` and `?page=` params are applied
+    client-side only - the server returns the same first page regardless - so the
+    only server-side filter is the skill path, `/remote-jobs/<skill>`. One request
+    per configured skill is therefore the whole ceiling of what Arc will give us.
+
+    Only `externalJobs` are ingested. The other bucket, `arcJobs`, is Arc's own
+    marketplace contracts with the client withheld - no employer name to research
+    or address a cover letter to, and no stable public slug, so those records
+    would collide on URL and be useless downstream even if they survived.
+
+    Caveat carried into the record: list payloads have no description text and Arc
+    gates the full posting behind an account, so records land with metadata
+    (title, company, requiredCountries, salary band, tech categories) and Arc's
+    own job slug rather than a scraped description.
+    """
+
+    name = "arc"
+
+    BASE = "https://arc.dev"
+
+    def __init__(self, config):
+        self.config = config
+
+    def fetch(self) -> list[RawJob]:
+        if not self.config or not self.config.enabled:
+            return []
+        jobs: list[RawJob] = []
+        seen: set[str] = set()
+        for query in self.config.queries:
+            skill = re.sub(r"[^a-z0-9]+", "-", query.lower()).strip("-")
+            listing_url = f"{self.BASE}/remote-jobs/{skill}" if skill else f"{self.BASE}/remote-jobs"
+            try:
+                props = _next_data(fetch_html(listing_url)).get("props", {}).get("pageProps", {})
+            except Exception:
+                continue
+            for item in props.get("externalJobs") or []:
+                if not isinstance(item, dict):
+                    continue
+                # urlString is Arc's own per-posting slug and is what makes the job
+                # URL unique; randomKey is a stable id but not addressable.
+                slug = str(item.get("urlString") or "")
+                external_id = slug or str(item.get("randomKey") or "")
+                if not external_id or external_id in seen:
+                    continue
+                seen.add(external_id)
+                if len(jobs) >= self.config.limit:
+                    return jobs
+                jobs.append(
+                    RawJob(
+                        discovery_source=self.name,
+                        source_tier="aggregator",
+                        board_type="arc",
+                        external_id=external_id,
+                        fetched_at=datetime.now(timezone.utc),
+                        payload={
+                            "job": item,
+                            "listing_url": listing_url,
+                            "query": query,
+                        },
+                    )
+                )
+        return jobs

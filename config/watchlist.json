@@ -117,5 +117,45 @@
   "hackernews": {
     "enabled": true,
     "limit": 400
+  },
+  "hiringcafe": {
+    "enabled": true,
+    "limit": 400,
+    "pages_per_query": 3,
+    "queries": [
+      "python backend engineer",
+      "fastapi engineer",
+      "django backend developer",
+      "backend engineer api",
+      "algorithmic trading engineer python",
+      "python automation engineer"
+    ]
+  },
+  "nodesk": {
+    "enabled": true,
+    "limit": 100
+  },
+  "remote100k": {
+    "enabled": true,
+    "limit": 120,
+    "queries": [
+      "python",
+      "backend",
+      "software-engineer",
+      "fastapi",
+      "django",
+      "api"
+    ]
+  },
+  "arc": {
+    "enabled": true,
+    "limit": 200,
+    "queries": [
+      "python",
+      "backend-engineer",
+      "fastapi",
+      "django",
+      "api-development"
+    ]
   }
 }

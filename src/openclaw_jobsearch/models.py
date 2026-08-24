@@ -12,6 +12,7 @@ SourceTier = Literal["ats", "aggregator", "remote_api"]
 BoardType = Literal[
     "greenhouse", "lever", "ashby", "serpapi", "remotive", "custom_page",
     "himalayas", "remoteok", "weworkremotely", "hackernews",
+    "hiringcafe", "nodesk", "remote100k", "arc",
     "unknown",
 ]
 ValidationStatus = Literal["accepted", "rejected"]
@@ -87,6 +88,8 @@ class RemoteBoardConfig(BaseModel):
     limit: int = 200
     queries: list[str] = Field(default_factory=lambda: ["python backend"])
     feeds: list[str] = Field(default_factory=list)
+    # Only the paginated boards read this; feed-based ones fetch a single document.
+    pages_per_query: int = 1
 
 
 class CustomPageConfig(BaseModel):
@@ -108,6 +111,10 @@ class WatchlistConfig(BaseModel):
     remoteok: RemoteBoardConfig | None = None
     weworkremotely: RemoteBoardConfig | None = None
     hackernews: RemoteBoardConfig | None = None
+    hiringcafe: RemoteBoardConfig | None = None
+    nodesk: RemoteBoardConfig | None = None
+    remote100k: RemoteBoardConfig | None = None
+    arc: RemoteBoardConfig | None = None
 
 
 class EvidenceSnippet(BaseModel):

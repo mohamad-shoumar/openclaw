@@ -224,6 +224,14 @@
       "reason": "Posting requires US work authorization; no visa sponsorship available.",
       "created_at": "2026-08-19",
       "origin_job": "netcyberops-jr-backend-python-developer-eyjqb2jfdgl0bguioijkcibcywnrzw5kifb5dghvbibezxzlbg9wzxiilcjjb21wyw55x25hbwuioijo"
+    },
+    {
+      "id": "title_pattern-007",
+      "kind": "title_pattern",
+      "value": "desarrollador",
+      "reason": "Job title is in Spanish, indicating non-English language requirement",
+      "created_at": "2026-08-24",
+      "origin_job": "kruger-nearshore-llc-rekluti-desarrollador-full-stack-1137062"
     }
   ]
 }

@@ -12,6 +12,17 @@ function Chip({ children, tone = 'neutral' }) {
   return <span className={`rounded px-2 py-0.5 text-[11px] ${tones[tone]}`}>{children}</span>
 }
 
+// "5+ years" and "5 - 5 years" are different requirements. The closed-range
+// render hid the open-ended ones, so it read as an exact match to the ceiling.
+function experienceLabel(job) {
+  const min = job.experience_required_min
+  const max = job.experience_required_max
+  if (min == null && max == null) return 'not stated'
+  if (job.experience_open_ended) return `${min}+ years`
+  if (max != null && min != null && max !== min) return `${min}-${max} years`
+  return `${min ?? max} years`
+}
+
 function scopeTone(scope) {
   if (scope === 'global') return 'good'
   if (scope === 'open') return 'accent'
@@ -204,9 +215,7 @@ export default function JobDetail({ job, onApprove, onReject, onChanged, busy })
 
             <section>
               <h3 className="mb-1.5 font-medium text-neutral-300">Experience</h3>
-              <p className="text-neutral-400">
-                {job.experience_required_min ?? '?'} - {job.experience_required_max ?? '?'} years
-              </p>
+              <p className="text-neutral-400">{experienceLabel(job)}</p>
             </section>
 
             {job.evidence_snippets?.length > 0 && (

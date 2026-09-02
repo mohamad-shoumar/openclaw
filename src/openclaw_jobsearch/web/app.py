@@ -130,6 +130,7 @@ def job_detail(job: JobRecord) -> dict[str, Any]:
             "lebanon_eligibility": job.lebanon_eligibility,
             "experience_required_min": job.experience_required_min,
             "experience_required_max": job.experience_required_max,
+            "experience_open_ended": job.experience_open_ended,
             "evidence_snippets": [s.model_dump() for s in job.evidence_snippets],
             "rejection_reasons": job.rejection_reasons,
             "review_notes": job.review_notes,

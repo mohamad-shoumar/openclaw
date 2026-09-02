@@ -57,6 +57,18 @@ class RulesConfig(BaseModel):
     allowed_remote_scopes: list[str]
     rejected_title_keywords: list[str]
     required_skill_keywords: list[str]
+    # Evidence that stands in for a required skill keyword. A posting that never says
+    # "python" but asks for FastAPI or Celery is a Python role in practice. Empty keeps
+    # the strict behaviour where only `required_skill_keywords` can satisfy the gate.
+    required_skill_alternatives: list[str] = Field(default_factory=list)
+    # When true, a role must positively match a target-role keyword to survive.
+    # When false, only the excluded-function blocklist applies, so unfamiliar but
+    # plausible titles reach manual review instead of being dropped silently.
+    require_target_role_match: bool = True
+    # Titles that are not a job at all: policy pages, talent pools, evergreen
+    # placeholders. The target-role gate used to reject these as a side effect of
+    # requiring a role keyword, so they need an explicit gate once it is relaxed.
+    non_posting_title_patterns: list[str] = Field(default_factory=list)
     preferred_skill_keywords: list[str] = Field(default_factory=list)
     rejected_primary_stack_keywords: list[str] = Field(default_factory=list)
     remote_restriction_patterns: list[str] = Field(default_factory=list)
@@ -151,6 +163,9 @@ class JobRecord(BaseModel):
     lebanon_eligibility: Literal["eligible", "ineligible", "unknown"] = "unknown"
     experience_required_min: int | None = None
     experience_required_max: int | None = None
+    # True when the posting said "5+" rather than a closed range, so the gate can
+    # tell "at least five, possibly many more" from "exactly five".
+    experience_open_ended: bool = False
     seniority_title: str = "unknown"
     required_tech: list[str] = Field(default_factory=list)
     preferred_tech: list[str] = Field(default_factory=list)

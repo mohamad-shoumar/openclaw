@@ -42,3 +42,6 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The package is not installed into the local .venv, so a bare `pytest` could not
+# import openclaw_jobsearch. Put src on sys.path for test collection.
+pythonpath = ["src"]

@@ -1,5 +1,4 @@
 # secrets
-.env
 
 # generated, regenerable: everything the pipeline produces
 /var/
@@ -28,3 +27,5 @@ skills-lock.json
 
 # macOS
 .DS_Store
+config.bat
+node_modules

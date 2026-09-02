@@ -5,7 +5,30 @@
   "max_required_experience_years": 5,
   "allowed_remote_scopes": [
     "global",
-    "open"
+    "open",
+    "unknown"
+  ],
+  "require_target_role_match": false,
+  "non_posting_title_patterns": [
+    "code of conduct",
+    "privacy notice",
+    "privacy policy",
+    "candidate privacy",
+    "open application",
+    "general application",
+    "spontaneous application",
+    "speculative application",
+    "open roles",
+    "open positions",
+    "multiple roles",
+    "various roles",
+    "other roles",
+    "emerging talent",
+    "talent pool",
+    "talent community",
+    "talent network",
+    "join our team",
+    "future opportunities"
   ],
   "rejected_title_keywords": [
     "senior",
@@ -24,6 +47,23 @@
   ],
   "required_skill_keywords": [
     "python"
+  ],
+  "required_skill_alternatives": [
+    "fastapi",
+    "django",
+    "flask",
+    "asyncio",
+    "celery",
+    "pydantic",
+    "sqlalchemy",
+    "pandas",
+    "numpy",
+    "scipy",
+    "airflow",
+    "dagster",
+    "pytest",
+    "boto3",
+    "django rest framework"
   ],
   "preferred_skill_keywords": [
     "fastapi",
@@ -74,7 +114,13 @@
     "us citizens only",
     "us citizen",
     "green card",
-    "w2"
+    "w2",
+    "us remote",
+    "usa remote",
+    "u.s. remote",
+    "united states remote",
+    "remote us",
+    "remote usa"
   ],
   "hybrid_patterns": [
     "hybrid",

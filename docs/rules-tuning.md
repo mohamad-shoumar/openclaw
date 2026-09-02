@@ -5,6 +5,28 @@ Two mechanisms decide what gets rejected.
 `config/rules.json` holds the standing strict rules: age limits, allowed remote scopes, experience ceilings, title and stack keywords.
 `config/feedback.json` holds rules learned from your own rejections.
 
+## The standing-rule gates
+
+`validate_job` collects every reason a posting fails rather than stopping at the first, so a rejected job usually trips several gates at once.
+That matters when loosening: relaxing one gate often changes nothing, because the same jobs are still held by the others.
+
+Four gates are tunable in ways worth knowing about.
+
+`required_skill_keywords` with `required_skill_alternatives` decides the Python gate.
+A posting passes on a direct keyword hit, or on any alternative phrase, so a job asking for FastAPI or Celery counts as Python whether or not the word survived the scrape.
+Emptying `required_skill_keywords` disables the gate entirely, which is not advisable: on the 2026-08-31 corpus it admitted 111 extra jobs that were almost all bad scrapes, including titles like "Unknown title" and "Executive Assistant to CEO".
+The gate is the pipeline's most effective filter against scraped non-jobs, not only a skill check.
+
+`require_target_role_match` controls whether a role must positively match a backend/trading keyword.
+With it off, an unrecognised but plausible title reaches manual review instead of being dropped.
+Turning it off also removes the side effect it used to provide, which is why `non_posting_title_patterns` exists.
+
+`non_posting_title_patterns` rejects titles that are not a job at all: policy pages, talent pools, evergreen placeholders.
+Keep these as title phrases only, because the same words appear legitimately in a job description.
+
+`allowed_remote_scopes` may include `unknown`.
+A posting with no remote signal at all is then queued for review rather than rejected, on the grounds that absent evidence is not negative evidence.
+
 ## Feedback generalizes by dimension
 
 A verdict on a single job is close to worthless.

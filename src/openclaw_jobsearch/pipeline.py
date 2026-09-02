@@ -163,9 +163,10 @@ def validate_job(job: JobRecord, config: AppConfig, as_of: date | None = None) -
         )
 
     job.seniority_title = _classify_seniority(job.title)
-    exp_min, exp_max, exp_evidence = _extract_experience(job.description_text)
+    exp_min, exp_max, exp_open_ended, exp_evidence = _extract_experience(job.description_text)
     job.experience_required_min = exp_min
     job.experience_required_max = exp_max
+    job.experience_open_ended = exp_open_ended
     if exp_evidence:
         job.evidence_snippets.append(EvidenceSnippet(field="experience", snippet=exp_evidence))
 
@@ -187,13 +188,18 @@ def validate_job(job: JobRecord, config: AppConfig, as_of: date | None = None) -
         reasons.append("Job appears to be hybrid or on-site.")
     if job.posted_at and (as_of - job.posted_at).days > rules.max_job_age_days:
         reasons.append(f"Job is older than {rules.max_job_age_days} days.")
-    if job.experience_required_max and job.experience_required_max > rules.max_required_experience_years:
-        reasons.append("Required experience exceeds the strict maximum.")
+    experience_reason = _experience_rejection_reason(job, rules.max_required_experience_years)
+    if experience_reason:
+        reasons.append(experience_reason)
     if _matches_any(title_text, rules.rejected_title_keywords):
         reasons.append("Role seniority is above the strict target.")
-    if not _is_target_role(title_text, description_text, config.profile):
+    if _is_excluded_function(title_text, config.profile):
+        reasons.append("Role function is on the excluded list.")
+    if _matches_any(title_text, rules.non_posting_title_patterns):
+        reasons.append("Title is not a job posting.")
+    if rules.require_target_role_match and not _matches_target_role(title_text, description_text):
         reasons.append("Role type is outside the target backend/trading profile.")
-    if "python" not in required_tech and "python" not in preferred_tech:
+    if not _has_required_skill_signal(required_tech, preferred_tech, searchable_text, rules):
         reasons.append("Python is not clearly part of the role requirements.")
     if _has_rejected_primary_stack(description_text, rules):
         reasons.append("Primary stack appears misaligned with Python backend focus.")
@@ -1160,22 +1166,182 @@ def _classify_seniority(title: str) -> str:
     return "mid"
 
 
-def _extract_experience(text: str) -> tuple[int | None, int | None, str]:
-    lowered = text.lower()
-    patterns = [
-        r"(\d+)\s*[-–]\s*(\d+)\+?\s*years",
-        r"(\d+)\+?\s*years",
+# Words that stand in for a digit in "five years of experience".
+NUMBER_WORD_VALUES = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    "fifteen": 15, "twenty": 20,
+}
+
+# Headings under which a year count is a bonus rather than the bar for the role.
+# A "2+ years of Python" nice-to-have must not stand in for the "8+ years" the
+# posting actually requires.
+EXPERIENCE_BONUS_MARKERS = (
+    "nice to have", "nice-to-have", "nice to haves", "bonus points", "bonus if",
+    "bonus:", "preferred qualifications", "preferred experience",
+    "preferred skills", "good to have", "desirable", "a plus", "is a plus",
+    "pluses", "optional", "not required", "would be great",
+)
+
+# Headings that reopen a requirements block after a bonus block.
+EXPERIENCE_REQUIRED_MARKERS = (
+    "requirement", "required", "must have", "qualifications", "what you need",
+    "what you'll need", "who you are", "we're looking for", "we are looking for",
+    "you have", "you bring", "about you", "experience:", "minimum qualifications",
+    "basic qualifications", "skills and qualifications",
+)
+
+_YEARS_UNIT = r"(?:years?|yrs?\.?)(?![a-z0-9])"
+_NUMBER = r"(?:\d{1,2}|" + "|".join(NUMBER_WORD_VALUES) + r")"
+# Trailing markers that make a floor unbounded: "5+", "5 plus", "5 or more".
+_OPEN_SUFFIX = r"(?:\s*\+|\s+plus\b|\s+or\s+more\b|\s+or\s+above\b|\s+or\s+greater\b)"
+
+_EXPERIENCE_RANGE_RE = re.compile(
+    rf"({_NUMBER})\s*(?:[-–—]|\bto\b)\s*({_NUMBER})({_OPEN_SUFFIX})?\s*{_YEARS_UNIT}"
+)
+_EXPERIENCE_SINGLE_RE = re.compile(
+    rf"({_NUMBER})({_OPEN_SUFFIX})?\s*{_YEARS_UNIT}"
+)
+# Leading phrases that make a floor unbounded even without a "+".
+_OPEN_PREFIX_RE = re.compile(
+    r"(?:at\s+least|a\s+minimum\s+of|minimum\s+of|minimum|min\.?|more\s+than|"
+    r"no\s+less\s+than|upwards\s+of|over)\s+$"
+)
+# A count that measures elapsed time or company history, not candidate experience.
+_TIME_DECOY_PREFIX_RE = re.compile(
+    r"(?:past|last|next|previous|founded|since"
+    # "we have been licensing Kraken for over 4 years" is company history, while
+    # "you have over 4 years of experience" is the requirement, so the elapsed-time
+    # reading needs the "for" in front of it.
+    r"|for\s+(?:over|more\s+than|nearly|almost|the\s+past))\s+$"
+)
+_TIME_DECOY_SUFFIX_RE = re.compile(r"^\s*(?:ago|of\s+operation)(?!\w)")
+
+
+def _experience_section_is_bonus(text: str, position: int) -> bool:
+    """Whether the year count at `position` sits under a bonus heading.
+
+    Bonus and requirement headings are located independently and the nearest
+    preceding one wins. Requirement markers falling inside a bonus marker are
+    skipped so "preferred qualifications" is not read as a requirements heading
+    through its own "qualifications" substring.
+    """
+    window = text[:position]
+    bonus_spans = [
+        match.span()
+        for marker in EXPERIENCE_BONUS_MARKERS
+        for match in re.finditer(re.escape(marker), window)
     ]
-    for pattern in patterns:
-        match = re.search(pattern, lowered)
-        if not match:
-            continue
-        snippet = lowered[max(0, match.start() - 40) : match.end() + 40]
-        if len(match.groups()) == 2:
-            return int(match.group(1)), int(match.group(2)), snippet
-        value = int(match.group(1))
-        return value, value, snippet
-    return None, None, ""
+    last_bonus = max((start for start, _ in bonus_spans), default=-1)
+    last_required = -1
+    for marker in EXPERIENCE_REQUIRED_MARKERS:
+        for match in re.finditer(re.escape(marker), window):
+            if any(start <= match.start() < end for start, end in bonus_spans):
+                continue
+            last_required = max(last_required, match.start())
+    return last_bonus > last_required
+
+
+def _parse_experience_number(token: str) -> int | None:
+    return int(token) if token.isdigit() else NUMBER_WORD_VALUES.get(token)
+
+
+def _collect_experience_matches(lowered: str) -> list[tuple[int, int | None, bool, bool, str]]:
+    """Every year-count requirement in the text, as (floor, ceiling, open_ended, is_bonus, snippet).
+
+    Ranges are collected first and their spans block the single-number pattern,
+    so "3 - 5 years" yields one 3..5 requirement rather than a bare 3 and a bare 5.
+    """
+    found: list[tuple[int, int | None, bool, bool, str]] = []
+    consumed: list[tuple[int, int]] = []
+
+    for pattern, is_range in ((_EXPERIENCE_RANGE_RE, True), (_EXPERIENCE_SINGLE_RE, False)):
+        for match in pattern.finditer(lowered):
+            if any(start <= match.start() < end for start, end in consumed):
+                continue
+            floor = _parse_experience_number(match.group(1))
+            if floor is None:
+                continue
+            ceiling = _parse_experience_number(match.group(2)) if is_range else floor
+            open_marker = match.group(3) if is_range else match.group(2)
+
+            before = lowered[max(0, match.start() - 30) : match.start()]
+            after = lowered[match.end() : match.end() + 20]
+            if _TIME_DECOY_PREFIX_RE.search(before) or _TIME_DECOY_SUFFIX_RE.match(after):
+                continue
+
+            open_ended = bool(open_marker) or bool(_OPEN_PREFIX_RE.search(before))
+            if open_ended:
+                ceiling = None
+            if ceiling is not None and ceiling < floor:
+                floor, ceiling = ceiling, floor
+
+            consumed.append(match.span())
+            snippet = lowered[max(0, match.start() - 40) : match.end() + 40]
+            is_bonus = _experience_section_is_bonus(lowered, match.start())
+            found.append((floor, ceiling, open_ended, is_bonus, snippet))
+    return found
+
+
+def _extract_experience(text: str) -> tuple[int | None, int | None, bool, str]:
+    """The binding years-of-experience requirement as (min, max, open_ended, evidence).
+
+    The floor is the highest one stated in a requirements block, because a
+    posting listing several counts is bounded by its largest hard requirement,
+    not by whichever one happens to appear first. `open_ended` records a "5+"
+    that the old closed (5, 5) range silently dropped, so the gate can treat
+    "5 or more" as exceeding a ceiling of 5. Counts appearing only under a
+    bonus heading are used when nothing else states one, and the snippet says
+    so, so a reviewer can see where the number came from.
+    """
+    lowered = text.lower()
+    matches = _collect_experience_matches(lowered)
+    if not matches:
+        return None, None, False, ""
+
+    required = [entry for entry in matches if not entry[3]]
+    pool = required or matches
+    floor, ceiling, open_ended, is_bonus, snippet = max(pool, key=lambda entry: (entry[0], entry[2]))
+    prefix = "preferred/bonus section: " if is_bonus else ""
+    return floor, ceiling, open_ended, f"{prefix}{snippet}"
+
+
+def _format_experience_requirement(job: JobRecord) -> str:
+    floor = job.experience_required_min
+    if floor is None:
+        return "an unstated number of years"
+    if job.experience_open_ended:
+        return f"{floor}+ years"
+    if job.experience_required_max is not None and job.experience_required_max != floor:
+        return f"{floor}-{job.experience_required_max} years"
+    return f"{floor} years"
+
+
+def _experience_rejection_reason(job: JobRecord, ceiling: int) -> str | None:
+    """Reject a posting that asks for more experience than the ceiling allows.
+
+    The floor carries the requirement: "5+ years" asks for at least five and
+    possibly many more, so it exceeds a ceiling of five, while a closed
+    "3 - 5 years" fits inside it. The previous check compared only the range
+    ceiling with a strict `>`, so every posting whose floor sat exactly on the
+    limit survived - including "5+ years", which the extractor had already
+    flattened into a closed (5, 5).
+    """
+    floor = job.experience_required_min
+    if floor is None:
+        return None
+    exceeds = (
+        floor >= ceiling
+        if job.experience_open_ended
+        else floor > ceiling
+        or (job.experience_required_max is not None and job.experience_required_max > ceiling)
+    )
+    if not exceeds:
+        return None
+    return (
+        f"Requires {_format_experience_requirement(job)}, "
+        f"above the strict maximum of {ceiling}."
+    )
 
 
 def _extract_tech(text: str, rules) -> tuple[list[str], list[str]]:
@@ -1232,35 +1398,66 @@ def _has_rejected_primary_stack(text: str, rules) -> bool:
     return any(keyword in lowered for keyword in rules.rejected_primary_stack_keywords)
 
 
-def _is_target_role(title_text: str, description_text: str, profile=None) -> bool:
-    role_keywords = [
-        "backend",
-        "python",
-        "software engineer",
-        "software developer",
-        "developer",
-        "engineer",
-        "platform",
-        "trading",
-        "api",
-    ]
-    blocked_keywords = [
-        "account executive",
-        "sales",
-        "marketing",
-        "customer success",
-        "recruiter",
-        "designer",
-        "product manager",
-        "business development",
-    ]
+EXCLUDED_FUNCTION_KEYWORDS = (
+    "account executive",
+    "sales",
+    "marketing",
+    "customer success",
+    "recruiter",
+    "designer",
+    "product manager",
+    "business development",
+)
+
+TARGET_ROLE_TITLE_KEYWORDS = (
+    "backend",
+    "python",
+    "software engineer",
+    "software developer",
+    "developer",
+    "engineer",
+    "platform",
+    "trading",
+    "api",
+)
+
+
+def _is_excluded_function(title_text: str, profile=None) -> bool:
+    """A title naming a job function the candidate does not do at all.
+
+    Kept separate from the target-role test because the two failed for opposite
+    reasons under one verdict: "Account Executive" is a hard no, while a title
+    the keyword list simply does not recognise is a candidate for manual review.
+    """
+    blocked = list(EXCLUDED_FUNCTION_KEYWORDS)
     if profile is not None:
-        blocked_keywords = blocked_keywords + [kw.lower() for kw in profile.excluded_role_keywords]
-    if _matches_any(title_text, blocked_keywords):
-        return False
-    if any(keyword in title_text for keyword in role_keywords):
+        blocked += [kw.lower() for kw in profile.excluded_role_keywords]
+    return _matches_any(title_text, blocked)
+
+
+def _matches_target_role(title_text: str, description_text: str) -> bool:
+    """Positive evidence that this is a backend/trading engineering role."""
+    if any(keyword in title_text for keyword in TARGET_ROLE_TITLE_KEYWORDS):
         return True
     return any(keyword in description_text for keyword in ["python", "backend", "fastapi", "django", "trading systems"])
+
+
+def _has_required_skill_signal(
+    required_tech: list[str], preferred_tech: list[str], searchable_text: str, rules
+) -> bool:
+    """Whether the posting shows evidence of the required skill.
+
+    An empty `required_skill_keywords` disables the gate. Otherwise a posting
+    passes on a direct keyword hit, or on any `required_skill_alternatives`
+    phrase: a job asking for FastAPI or Celery is a Python job whether or not
+    the word "Python" survived the scrape.
+    """
+    if not rules.required_skill_keywords:
+        return True
+    found = set(required_tech) | set(preferred_tech)
+    if any(skill in found for skill in rules.required_skill_keywords):
+        return True
+    return _matches_any(searchable_text, rules.required_skill_alternatives)
 
 
 def _write_raw_snapshot(data_dir: Path, run_id: str, raw_jobs: list[RawJob]) -> None:
@@ -1648,7 +1845,12 @@ def _parse_salary(value: str) -> tuple[float | None, float | None, str | None]:
 
 @lru_cache(maxsize=2048)
 def _phrase_pattern(phrase: str) -> re.Pattern:
-    """Match a phrase on word boundaries so 'office' never matches 'officer'."""
+    """Match a phrase on word boundaries so 'office' never matches 'officer'.
+
+    Cached because the rule sets are fixed while a run or a replay walks
+    thousands of postings, so the same few hundred patterns are otherwise
+    recompiled once per job.
+    """
     return re.compile(rf"(?<!\w){re.escape(phrase.lower())}(?!\w)")
 
 

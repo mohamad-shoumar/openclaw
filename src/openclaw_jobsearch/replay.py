@@ -30,6 +30,7 @@ DERIVED_FIELDS = {
     "seniority_title": "unknown",
     "experience_required_min": None,
     "experience_required_max": None,
+    "experience_open_ended": False,
     "validation_status": "rejected",
 }
 DERIVED_LIST_FIELDS = (
